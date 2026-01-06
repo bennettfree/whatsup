@@ -1,0 +1,32 @@
+[
+  {
+    "id": "sample1",
+    "name": "Sample Rooftop Session",
+    "info": "Live DJ, small crowd, city views.",
+    "dates": {
+      "start": { "dateTime": "2025-01-01T20:00:00Z" }
+    },
+    "priceRanges": [
+      { "min": 0, "max": 0 }
+    ],
+    "classifications": [
+      { "segment": { "name": "Music" } }
+    ],
+    "images": [
+      { "url": "https://example.com/sample-event.jpg", "width": 1024, "height": 512 }
+    ],
+    "_embedded": {
+      "venues": [
+        {
+          "name": "Skyline Bar",
+          "location": {
+            "latitude": 40.7128,
+            "longitude": -74.006
+          }
+        }
+      ]
+    }
+  }
+]
+
+

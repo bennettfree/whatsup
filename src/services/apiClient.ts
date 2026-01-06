@@ -1,8 +1,10 @@
 import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
 import type { ApiError } from '@/types';
 
-// TODO: Replace with your actual API URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.whatsup.app';
+// Backend base URL for API calls. Must be configured via EXPO_PUBLIC_API_URL
+// so that mobile devices can reach your API over the network.
+// When undefined, API calls should gracefully no-op at the service layer.
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 class ApiClient {
   private client: AxiosInstance;

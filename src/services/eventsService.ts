@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { apiClient, API_BASE_URL } from './apiClient';
 
 export type Event = {
   id: string;
@@ -42,84 +42,38 @@ export interface EventQuery {
 // the UI and higher-level code insulated from provider-specific details.
 type TicketmasterEvent = any;
 
-interface TicketmasterResponse {
-  _embedded?: {
-    events?: TicketmasterEvent[];
-  };
-}
-
-const TICKETMASTER_BASE_URL = '/ticketmaster/events';
-
 export const eventsService = {
   async fetchEvents(params: EventQuery): Promise<Event[]> {
-    // This assumes your backend proxy exposes a Ticketmaster wrapper at
-    // TICKETMASTER_BASE_URL. The mobile app talks only to your proxy,
-    // never directly to Ticketmaster.
-    const response = await apiClient.get<TicketmasterResponse>(TICKETMASTER_BASE_URL, {
-      params: {
-        lat: params.lat,
-        lng: params.lng,
-        radius: params.radius,
-        startDate: params.dateRange?.start,
-        endDate: params.dateRange?.end,
-      },
-    });
+    // If no backend URL is configured, skip network calls and fall back
+    // to whatever the caller uses for mock data.
+    if (!API_BASE_URL) {
+      if (__DEV__) {
+        console.warn(
+          '[eventsService] EXPO_PUBLIC_API_URL is not set; skipping events fetch.',
+        );
+      }
+      return [];
+    }
 
-    const rawEvents = response._embedded?.events ?? [];
-    return rawEvents.map(normalizeTicketmasterEvent).filter(Boolean) as Event[];
+    const query: Record<string, string | number> = {
+      lat: params.lat,
+      lng: params.lng,
+      radius: params.radius,
+    };
+    if (params.dateRange?.start) query.startDate = params.dateRange.start;
+    if (params.dateRange?.end) query.endDate = params.dateRange.end;
+
+    try {
+      const events = await apiClient.get<Event[]>('/events', { params: query });
+      return events;
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[eventsService] Failed to fetch events', error);
+      }
+      return [];
+    }
   },
 };
 
-const normalizeTicketmasterEvent = (raw: TicketmasterEvent): Event | null => {
-  if (!raw || !raw.id || !raw.name) return null;
-
-  const dates = raw.dates ?? {};
-  const startDateTime = dates.start?.dateTime ?? dates.start?.localDate;
-  const endDateTime = dates.end?.dateTime ?? dates.end?.localDate;
-
-  const priceRanges = Array.isArray(raw.priceRanges) ? raw.priceRanges : [];
-  const priceMin = priceRanges.length ? priceRanges[0].min ?? undefined : undefined;
-  const priceMax = priceRanges.length ? priceRanges[0].max ?? undefined : undefined;
-  const isFree = priceMin === 0 || raw.priceRanges === undefined;
-
-  const classifications = Array.isArray(raw.classifications) ? raw.classifications : [];
-  const primaryClassification = classifications[0] ?? {};
-  const category =
-    primaryClassification.segment?.name ??
-    primaryClassification.genre?.name ??
-    primaryClassification.subGenre?.name ??
-    'Event';
-
-  const embedded = raw._embedded ?? {};
-  const venue = Array.isArray(embedded.venues) ? embedded.venues[0] : undefined;
-
-  const location = venue?.location;
-  const latitude = location?.latitude ? Number(location.latitude) : NaN;
-  const longitude = location?.longitude ? Number(location.longitude) : NaN;
-
-  const images = Array.isArray(raw.images) ? raw.images : [];
-  const imageUrl = images[0]?.url;
-
-  return {
-    id: raw.id,
-    type: 'event',
-    title: raw.name,
-    description: raw.info ?? raw.pleaseNote ?? undefined,
-    startDate: startDateTime ?? '',
-    endDate: endDateTime,
-    priceMin,
-    priceMax,
-    isFree: Boolean(isFree),
-    category,
-    imageUrl,
-    venueName: venue?.name,
-    location: {
-      latitude: Number.isFinite(latitude) ? latitude : 0,
-      longitude: Number.isFinite(longitude) ? longitude : 0,
-    },
-    url: raw.url,
-    source: 'ticketmaster',
-  };
-};
 
 

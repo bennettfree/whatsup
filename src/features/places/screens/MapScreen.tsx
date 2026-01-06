@@ -9,6 +9,8 @@ import { Icon, iconColors } from '@/components/Icon';
 import { Rating, PriceLevel } from '@/components';
 import { mockPlaces, mockEvents, formatHours } from '@/utils/mockData';
 import type { Place, Event } from '@/types';
+import { eventsService, type Event as MapEvent } from '@/services/eventsService';
+import { placesService, type Place as MapPlace } from '@/services/placesService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -551,6 +553,9 @@ export const MapScreen = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [remotePlaces, setRemotePlaces] = useState<MapPlace[]>([]);
+  const [remoteEvents, setRemoteEvents] = useState<MapEvent[]>([]);
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
 
   useEffect(() => {
@@ -590,6 +595,44 @@ export const MapScreen = () => {
 
     setIsSearching(false);
   };
+
+  // Load remote events and places whenever the region changes meaningfully.
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoadingRemote(true);
+        const centerLat = region.latitude;
+        const centerLng = region.longitude;
+
+        const radiusMiles = 10;
+        const radiusMeters = 16093;
+
+        const [events, places] = await Promise.all([
+          eventsService.fetchEvents({
+            lat: centerLat,
+            lng: centerLng,
+            radius: radiusMiles,
+          }),
+          placesService.fetchPlaces({
+            lat: centerLat,
+            lng: centerLng,
+            radius: radiusMeters,
+          }),
+        ]);
+
+        setRemoteEvents(events);
+        setRemotePlaces(places);
+      } catch (error) {
+        if (__DEV__) {
+          console.log('Error loading map data', error);
+        }
+      } finally {
+        setIsLoadingRemote(false);
+      }
+    };
+
+    loadData();
+  }, [region.latitude, region.longitude]);
 
   const handleRecenter = async () => {
     if (userLocation) {
@@ -659,11 +702,11 @@ export const MapScreen = () => {
           pitchEnabled={true}
           rotateEnabled={true}
         >
-          {mockPlaces.map((place) => (
+          {(remotePlaces.length ? remotePlaces : mockPlaces).map((place) => (
             <CustomMarker
               key={place.id}
-              place={place}
-              onPress={() => handleMarkerPress(place)}
+              place={place as unknown as Place}
+              onPress={() => handleMarkerPress(place as unknown as Place)}
             />
           ))}
         </MapView>
