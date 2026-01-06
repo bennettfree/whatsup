@@ -98,7 +98,15 @@ const geocodeAddress = async (address: string): Promise<Region | null> => {
 };
 
 // Custom Marker Component
-const CustomMarker = ({ place, onPress }: { place: Place; onPress?: () => void }) => {
+const CustomMarker = ({
+  place,
+  onPress,
+  isActive,
+}: {
+  place: Place;
+  onPress?: () => void;
+  isActive?: boolean;
+}) => {
   return (
     <Marker
       coordinate={{
@@ -109,8 +117,14 @@ const CustomMarker = ({ place, onPress }: { place: Place; onPress?: () => void }
     >
       <View className="items-center">
         <View
-          className="w-9 h-9 rounded-full items-center justify-center shadow-lg"
-          style={{ backgroundColor: getCategoryColor(place.category) }}
+          className="rounded-full items-center justify-center shadow-lg"
+          style={{
+            backgroundColor: getCategoryColor(place.category),
+            width: isActive ? 40 : 36,
+            height: isActive ? 40 : 36,
+            borderWidth: isActive ? 2 : 0,
+            borderColor: isActive ? '#FFFFFF' : 'transparent',
+          }}
         >
           <CategoryIcon category={place.category} size={16} />
         </View>
@@ -557,6 +571,7 @@ export const MapScreen = () => {
   const [remoteEvents, setRemoteEvents] = useState<MapEvent[]>([]);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [activePlaceId, setActivePlaceId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -669,6 +684,7 @@ export const MapScreen = () => {
 
   const handleMarkerPress = (place: Place) => {
     setSelectedPlace(place);
+    setActivePlaceId(place.id);
     setModalVisible(true);
     mapRef.current?.animateToRegion(
       {
@@ -706,6 +722,7 @@ export const MapScreen = () => {
             <CustomMarker
               key={place.id}
               place={place as unknown as Place}
+              isActive={activePlaceId === place.id}
               onPress={() => handleMarkerPress(place as unknown as Place)}
             />
           ))}
@@ -776,6 +793,7 @@ export const MapScreen = () => {
         onClose={() => {
           setModalVisible(false);
           setSelectedPlace(null);
+          setActivePlaceId(null);
         }}
         onSave={handleSavePlace}
       />
