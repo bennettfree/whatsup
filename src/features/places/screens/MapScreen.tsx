@@ -280,7 +280,9 @@ const BusinessDetailModal = ({
                       <Text className="text-sm font-medium text-primary-500 ml-3">
                         Visit Website
                       </Text>
-                      <Icon name="external-link" size={16} color={iconColors.primary} className="ml-2" />
+                      <View className="ml-2">
+                        <Icon name="external-link" size={16} color={iconColors.primary} />
+                      </View>
                     </TouchableOpacity>
                   )}
                 </View>

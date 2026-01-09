@@ -1,29 +1,12 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  TouchableOpacity,
-  Dimensions,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Pressable, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Icon, iconColors, type IconName } from '@/components/Icon';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 2;
 const SMALL_SIZE = (SCREEN_WIDTH - GRID_GAP * 2) / 3;
 const LARGE_SIZE = SMALL_SIZE * 2 + GRID_GAP;
-
-const exploreCategories: { id: string; name: string; icon: IconName; color: string }[] = [
-  { id: '1', name: 'Food', icon: 'coffee', color: 'bg-orange-50' },
-  { id: '2', name: 'Nightlife', icon: 'moon', color: 'bg-purple-50' },
-  { id: '3', name: 'Events', icon: 'calendar', color: 'bg-pink-50' },
-  { id: '4', name: 'Cafés', icon: 'coffee', color: 'bg-amber-50' },
-  { id: '5', name: 'Outdoors', icon: 'sun', color: 'bg-green-50' },
-  { id: '6', name: 'Culture', icon: 'award', color: 'bg-blue-50' },
-];
 
 const exploreImages = [
   'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=400&fit=crop',
@@ -38,132 +21,166 @@ const exploreImages = [
 ];
 
 export const ExploreScreen = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFeed, setActiveFeed] = useState<'explore' | 'friends'>('explore');
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {/* Search Bar */}
-      <View className="px-4 py-2">
-        <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-3">
-          <Icon name="search" size={20} color={iconColors.default} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search places, events, or ask AI..."
-            placeholderTextColor="#9ca3af"
-            className="flex-1 text-base text-gray-900 ml-3"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Icon name="x" size={18} color={iconColors.default} />
-            </TouchableOpacity>
-          )}
+      {/* Feed toggle (Friends / Explore) */}
+      <View className="px-4 pt-3 pb-2 bg-white border-b border-gray-100">
+        <View className="flex-row bg-gray-100 rounded-full p-1">
+          <Pressable
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              paddingVertical: 6,
+              borderRadius: 9999,
+              backgroundColor: activeFeed === 'friends' ? '#FFFFFF' : 'transparent',
+              ...(activeFeed === 'friends' && {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+                elevation: 2,
+              }),
+            }}
+            onPress={() => setActiveFeed('friends')}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: activeFeed === 'friends' ? '#111827' : '#6B7280',
+              }}
+            >
+              Friends
+            </Text>
+          </Pressable>
+          <Pressable
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              paddingVertical: 6,
+              borderRadius: 9999,
+              backgroundColor: activeFeed === 'explore' ? '#FFFFFF' : 'transparent',
+              ...(activeFeed === 'explore' && {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2,
+                elevation: 2,
+              }),
+            }}
+            onPress={() => setActiveFeed('explore')}
+          >
+            <Text
+              style={{
+                fontSize: 12,
+                fontWeight: '600',
+                color: activeFeed === 'explore' ? '#111827' : '#6B7280',
+              }}
+            >
+              Explore
+            </Text>
+          </Pressable>
         </View>
+        <Text className="mt-2 text-xs text-gray-500">
+          {activeFeed === 'friends'
+            ? 'See spots your friends are saving and talking about.'
+            : 'Find new places, events, and scenes around you.'}
+        </Text>
       </View>
 
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Categories */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="py-3"
-          contentContainerStyle={{ paddingHorizontal: 16 }}
-        >
-          {exploreCategories.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              className={`items-center justify-center px-4 py-3 rounded-2xl mr-3 ${category.color}`}
-            >
-              <Icon name={category.icon} size={22} color={iconColors.active} />
-              <Text className="text-xs font-medium text-gray-700 mt-1">{category.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      {/* Content */}
+      {activeFeed === 'friends' ? (
+        // Blank Friends page
+        <View className="flex-1 bg-gray-50" />
+      ) : (
+        // Explore Grid
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+          <View className="flex-row flex-wrap">
+            {/* Row 1: 3 small */}
+            <View className="flex-row">
+              {exploreImages.slice(0, 3).map((img, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={{
+                    width: SMALL_SIZE,
+                    height: SMALL_SIZE,
+                    marginRight: i < 2 ? GRID_GAP : 0,
+                    marginBottom: GRID_GAP,
+                  }}
+                >
+                  <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                </TouchableOpacity>
+              ))}
+            </View>
 
-        {/* Explore Grid */}
-        <View className="flex-row flex-wrap">
-          {/* Row 1: 3 small */}
-          <View className="flex-row">
-            {exploreImages.slice(0, 3).map((img, i) => (
+            {/* Row 2: 1 large + 2 small stacked */}
+            <View className="flex-row">
               <TouchableOpacity
-                key={i}
                 style={{
-                  width: SMALL_SIZE,
-                  height: SMALL_SIZE,
-                  marginRight: i < 2 ? GRID_GAP : 0,
+                  width: LARGE_SIZE,
+                  height: LARGE_SIZE,
+                  marginRight: GRID_GAP,
                   marginBottom: GRID_GAP,
                 }}
               >
-                <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                <Image
+                  source={{ uri: exploreImages[3] }}
+                  style={{ flex: 1 }}
+                  contentFit="cover"
+                />
               </TouchableOpacity>
-            ))}
-          </View>
+              <View>
+                {exploreImages.slice(4, 6).map((img, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={{
+                      width: SMALL_SIZE,
+                      height: SMALL_SIZE,
+                      marginBottom: GRID_GAP,
+                    }}
+                  >
+                    <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-          {/* Row 2: 1 large + 2 small stacked */}
-          <View className="flex-row">
-            <TouchableOpacity
-              style={{
-                width: LARGE_SIZE,
-                height: LARGE_SIZE,
-                marginRight: GRID_GAP,
-                marginBottom: GRID_GAP,
-              }}
-            >
-              <Image
-                source={{ uri: exploreImages[3] }}
-                style={{ flex: 1 }}
-                contentFit="cover"
-              />
-            </TouchableOpacity>
-            <View>
-              {exploreImages.slice(4, 6).map((img, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={{
-                    width: SMALL_SIZE,
-                    height: SMALL_SIZE,
-                    marginBottom: GRID_GAP,
-                  }}
-                >
-                  <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
-                </TouchableOpacity>
-              ))}
+            {/* Row 3: 2 small stacked + 1 large */}
+            <View className="flex-row">
+              <View>
+                {exploreImages.slice(6, 8).map((img, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={{
+                      width: SMALL_SIZE,
+                      height: SMALL_SIZE,
+                      marginRight: GRID_GAP,
+                      marginBottom: GRID_GAP,
+                    }}
+                  >
+                    <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity
+                style={{
+                  width: LARGE_SIZE,
+                  height: LARGE_SIZE,
+                  marginBottom: GRID_GAP,
+                }}
+              >
+                <Image
+                  source={{ uri: exploreImages[8] }}
+                  style={{ flex: 1 }}
+                  contentFit="cover"
+                />
+              </TouchableOpacity>
             </View>
           </View>
-
-          {/* Row 3: 2 small stacked + 1 large */}
-          <View className="flex-row">
-            <View>
-              {exploreImages.slice(6, 8).map((img, i) => (
-                <TouchableOpacity
-                  key={i}
-                  style={{
-                    width: SMALL_SIZE,
-                    height: SMALL_SIZE,
-                    marginRight: GRID_GAP,
-                    marginBottom: GRID_GAP,
-                  }}
-                >
-                  <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity
-              style={{
-                width: LARGE_SIZE,
-                height: LARGE_SIZE,
-                marginBottom: GRID_GAP,
-              }}
-            >
-              <Image
-                source={{ uri: exploreImages[8] }}
-                style={{ flex: 1 }}
-                contentFit="cover"
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };

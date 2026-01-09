@@ -4,15 +4,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, Text } from 'react-native';
 import type { RootStackParamList } from './types';
 import { MainTabNavigator } from './MainTabNavigator';
+import MomentDetailScreen from '@/features/profile/screens/MomentDetailScreen';
+import PlaceDetailScreen from '@/features/places/screens/PlaceDetailScreen';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { mockUser } from '@/utils/mockData';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-
-// Placeholder detail screens
-const PlaceDetailScreen = () => (
-  <View className="flex-1 items-center justify-center bg-white">
-    <Text className="text-xl font-bold">Place Details</Text>
-  </View>
-);
 
 const EventDetailScreen = () => (
   <View className="flex-1 items-center justify-center bg-white">
@@ -53,6 +50,13 @@ export const RootNavigator = () => {
         {isAuthenticated ? (
           <>
             <Stack.Screen name="Main" component={MainTabNavigator} />
+            <Stack.Screen
+              name="MomentDetail"
+              component={MomentDetailScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
             <Stack.Screen 
               name="PlaceDetail" 
               component={PlaceDetailScreen}

@@ -5,6 +5,7 @@ import { Icon, iconColors } from '@/components/Icon';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { mockUser, mockPlaces, formatNumber } from '@/utils/mockData';
 import { Image } from 'expo-image';
+import type { MainTabScreenProps } from '@/navigation/types';
 
 type Review = {
   id: string;
@@ -14,6 +15,13 @@ type Review = {
   category?: string;
   text: string;
   photos?: string[];
+};
+
+type Moment = {
+  id: string;
+  mediaUri: string;
+  mediaType: 'photo' | 'video';
+  caption?: string;
 };
 
 const mockReviews: Review[] = [
@@ -46,12 +54,56 @@ const mockReviews: Review[] = [
   },
 ];
 
-export const ProfileScreen = () => {
+const mockMoments: Moment[] = [
+  {
+    id: 'm1',
+    mediaUri:
+      'https://cdn.pixabay.com/photo/2016/12/22/07/15/chess-1924642_1280.jpg',
+    mediaType: 'photo',
+    caption: 'Final move at a late-night chess tournament.',
+  },
+  {
+    id: 'm2',
+    mediaUri:
+      'https://cdn.pixabay.com/photo/2024/04/13/21/58/spaghetti-and-meatballs-8694542_1280.jpg',
+    mediaType: 'photo',
+    caption: 'Slow pasta night with friends.',
+  },
+  {
+    id: 'm3',
+    mediaUri:
+      'https://cdn.pixabay.com/photo/2017/06/01/08/24/woman-2362804_1280.jpg',
+    mediaType: 'photo',
+    caption: 'Rooftop sunset before the music hit.',
+  },
+  {
+    id: 'm4',
+    mediaUri:
+      'https://cdn.pixabay.com/photo/2017/08/01/11/38/paddle-2564598_1280.jpg',
+    mediaType: 'photo',
+    caption: 'First coffee, no rush, soft light.',
+  },
+  {
+    id: 'm5',
+    mediaUri:
+      'https://cdn.pixabay.com/photo/2019/04/06/03/34/girl-4106595_1280.jpg',
+    mediaType: 'photo',
+    caption: 'Slow morning coffee before the day really starts.',
+  },
+];
+
+type Props = MainTabScreenProps<'Profile'>;
+
+export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
+
   const isOwnProfile = true; // Placeholder until auth/user context is wired
+  const [activeFeed, setActiveFeed] = React.useState<'reviews' | 'moments'>(
+    'reviews'
+  );
 
   const plansSaved = mockUser.savedCount ?? 0;
   const eventsJoined = 3;
-  const spotsReviewed = mockReviews.length;
+  const friendsCount = formatNumber(mockUser.followersCount);
 
   const handleEditProfile = () => {
     console.log('Edit profile');
@@ -59,6 +111,10 @@ export const ProfileScreen = () => {
 
   const handleSettings = () => {
     console.log('Settings');
+  };
+
+  const handleOpenMoment = (moment: Moment) => {
+    navigation.navigate('MomentDetail', { momentId: moment.id });
   };
 
   const renderReviewCard = (review: Review) => {
@@ -121,6 +177,25 @@ export const ProfileScreen = () => {
     );
   };
 
+  const renderMomentCard = (moment: Moment) => {
+    return (
+      <TouchableOpacity
+        key={moment.id}
+        activeOpacity={0.9}
+        className="w-1/3 p-1"
+        onPress={() => handleOpenMoment(moment)}
+      >
+        <View className="rounded-xl bg-gray-200 overflow-hidden">
+          <Image
+            source={{ uri: moment.mediaUri }}
+            style={{ width: '100%', aspectRatio: 1 }}
+            contentFit="cover"
+          />
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       {/* App Header */}
@@ -134,133 +209,181 @@ export const ProfileScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Top identity section (card + stats + actions) */}
-      <View className="pt-4 pb-2">
-        <ProfileHeader
-          user={mockUser}
-          isOwnProfile={isOwnProfile}
-          interests={['Food lover', 'Live music', 'Hidden gems']}
-        />
+      <ScrollView
+        className="flex-1 bg-gray-50"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}
+      >
+        {/* Top identity section (card + stats + actions) */}
+        <View className="pt-4 pb-2">
+          <ProfileHeader
+            user={mockUser}
+            isOwnProfile={isOwnProfile}
+            interests={['Food lover', 'Live music', 'Hidden gems']}
+          />
 
-        {/* Stats row */}
-        <View className="mt-4 px-4">
-          <View className="flex-row justify-around">
-            <View className="items-center">
-              <Text className="text-lg font-semibold text-gray-900">
-                {plansSaved}
-              </Text>
-              <Text
-                className="text-xs text-gray-500 mt-0.5"
-                numberOfLines={1}
-              >
-                Plans Saved
-              </Text>
-            </View>
-            <View className="items-center">
-              <Text className="text-lg font-semibold text-gray-900">
-                {eventsJoined}
-              </Text>
-              <Text
-                className="text-xs text-gray-500 mt-0.5"
-                numberOfLines={1}
-              >
-                Events Joined
-              </Text>
-            </View>
-            <View className="items-center">
-              <Text className="text-lg font-semibold text-gray-900">
-                {spotsReviewed}
-              </Text>
-              <Text
-                className="text-xs text-gray-500 mt-0.5"
-                numberOfLines={1}
-              >
-                Spots Reviewed
-              </Text>
+          {/* Stats row */}
+          <View className="mt-4 px-4">
+            <View className="flex-row justify-around">
+              <View className="items-center">
+                <Text className="text-lg font-semibold text-gray-900">
+                  {plansSaved}
+                </Text>
+                <Text
+                  className="text-xs text-gray-500 mt-0.5"
+                  numberOfLines={1}
+                >
+                  Plans Saved
+                </Text>
+              </View>
+              <View className="items-center">
+                <Text className="text-lg font-semibold text-gray-900">
+                  {eventsJoined}
+                </Text>
+                <Text
+                  className="text-xs text-gray-500 mt-0.5"
+                  numberOfLines={1}
+                >
+                  Events Joined
+                </Text>
+              </View>
+              <View className="items-center">
+                <Text className="text-lg font-semibold text-gray-900">
+                  {friendsCount}
+                </Text>
+                <Text
+                  className="text-xs text-gray-500 mt-0.5"
+                  numberOfLines={1}
+                >
+                  Friends
+                </Text>
+              </View>
             </View>
           </View>
 
-          {/* Social context (subtle) */}
-          <Text className="mt-2.5 text-xs text-gray-400 text-center">
-            {formatNumber(mockUser.followersCount)} friends
-          </Text>
-        </View>
-
-        {/* Actions */}
-        <View className="mt-4 px-4 mb-2">
-          {isOwnProfile ? (
-            <TouchableOpacity
-              onPress={handleEditProfile}
-              className="w-full py-2.5 rounded-full bg-gray-900 items-center"
-              activeOpacity={0.9}
-            >
-              <Text className="text-sm font-semibold text-white">
-                Edit profile
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <View className="flex-row gap-2">
+          {/* Actions */}
+          <View className="mt-4 px-4 mb-2">
+            {isOwnProfile ? (
               <TouchableOpacity
-                className="flex-1 py-2.5 rounded-full bg-gray-900 items-center"
+                onPress={handleEditProfile}
+                className="w-full py-2.5 rounded-full bg-gray-900 items-center"
                 activeOpacity={0.9}
               >
                 <Text className="text-sm font-semibold text-white">
-                  Follow
+                  Edit profile
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                className="flex-1 py-2.5 rounded-full bg-gray-100 items-center"
-                activeOpacity={0.9}
-              >
-                <Text className="text-sm font-semibold text-gray-900">
-                  Message
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Divider */}
-        <View className="px-4 mt-2 mb-4">
-          <View className="h-px bg-gray-200" />
-        </View>
-      </View>
-
-      {/* Public activity / reviews */}
-      <View className="flex-1 bg-gray-50">
-        <ScrollView
-          className="flex-1"
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 24 }}
-        >
-          <View className="px-4 mb-3">
-            <Text className="text-sm font-semibold text-gray-900">
-              Reviews
-            </Text>
-            <Text className="mt-1 text-xs text-gray-500">
-              Your recent spots and how they felt.
-            </Text>
+            ) : (
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  className="flex-1 py-2.5 rounded-full bg-gray-900 items-center"
+                  activeOpacity={0.9}
+                >
+                  <Text className="text-sm font-semibold text-white">
+                    Follow
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 py-2.5 rounded-full bg-gray-100 items-center"
+                  activeOpacity={0.9}
+                >
+                  <Text className="text-sm font-semibold text-gray-900">
+                    Message
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
-          {mockReviews.length === 0 ? (
-            <View className="flex-1 items-center justify-center mt-16 px-8">
-              <Text className="text-sm text-gray-500 text-center mb-2">
-                You haven’t reviewed any spots yet.
-              </Text>
-              <TouchableOpacity
-                className="mt-2 px-4 py-2 rounded-full bg-gray-900"
-                activeOpacity={0.9}
+          {/* Divider */}
+          <View className="px-4 mt-2 mb-4">
+            <View className="h-px bg-gray-200" />
+          </View>
+        </View>
+
+        {/* Content type toggle and public activity */}
+        <View className="px-4 mb-2">
+          <View className="flex-row">
+            <TouchableOpacity
+              activeOpacity={0.9}
+              className={`flex-1 items-center pb-2 border-b-2 ${
+                activeFeed === 'reviews'
+                  ? 'border-gray-900'
+                  : 'border-transparent'
+              }`}
+              onPress={() => setActiveFeed('reviews')}
+            >
+              <Text
+                className={`text-sm ${
+                  activeFeed === 'reviews'
+                    ? 'font-semibold text-gray-900'
+                    : 'text-gray-500'
+                }`}
               >
-                <Text className="text-xs font-semibold text-white">
-                  Explore places nearby
+                Reviews
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              className={`flex-1 items-center pb-2 border-b-2 ${
+                activeFeed === 'moments'
+                  ? 'border-gray-900'
+                  : 'border-transparent'
+              }`}
+              onPress={() => setActiveFeed('moments')}
+            >
+              <Text
+                className={`text-sm ${
+                  activeFeed === 'moments'
+                    ? 'font-semibold text-gray-900'
+                    : 'text-gray-500'
+                }`}
+              >
+                Moments
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text className="mt-2 text-xs text-gray-500">
+            {activeFeed === 'reviews'
+              ? 'Your recent spots and how they felt.'
+              : 'Little snapshots that show what your nights out actually feel like.'}
+          </Text>
+        </View>
+
+        {/* Public activity feeds */}
+        <View className="bg-gray-50 pt-2">
+          {activeFeed === 'reviews' ? (
+            mockReviews.length === 0 ? (
+              <View className="items-center justify-center mt-16 px-8">
+                <Text className="text-sm text-gray-500 text-center mb-2">
+                  You haven’t reviewed any spots yet.
                 </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  className="mt-2 px-4 py-2 rounded-full bg-gray-900"
+                  activeOpacity={0.9}
+                >
+                  <Text className="text-xs font-semibold text-white">
+                    Explore places nearby
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              mockReviews.map(renderReviewCard)
+            )
+          ) : mockMoments.length === 0 ? (
+            <View className="items-center justify-center mt-16 px-8">
+              <Text className="text-sm text-gray-500 text-center">
+                No moments yet. When you’re out, save a few small scenes that
+                feel like you.
+              </Text>
             </View>
           ) : (
-            mockReviews.map(renderReviewCard)
+            <View className="flex-row flex-wrap px-2">
+              {mockMoments.map(renderMomentCard)}
+            </View>
           )}
-        </ScrollView>
-      </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };

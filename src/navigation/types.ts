@@ -11,6 +11,7 @@ export type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList>;
   PlaceDetail: { placeId: string };
   EventDetail: { eventId: string };
+  MomentDetail: { momentId: string };
   UserProfile: { userId: string };
   Search: { initialQuery?: string };
   Settings: undefined;
