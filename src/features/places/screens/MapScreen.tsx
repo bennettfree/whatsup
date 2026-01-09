@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, Dimensions, ActivityIndicator, Alert, Modal, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, Dimensions, ActivityIndicator, Alert, Modal, Linking, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Region, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -11,6 +11,7 @@ import { mockPlaces, mockEvents, formatHours } from '@/utils/mockData';
 import type { Place, Event } from '@/types';
 import { eventsService, type Event as MapEvent } from '@/services/eventsService';
 import { placesService, type Place as MapPlace } from '@/services/placesService';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -334,7 +335,7 @@ const BusinessDetailModal = ({
 // Date Filter Types
 type DateFilter = 'today' | 'tomorrow' | 'weekend' | 'custom';
 
-// What's Happening Bottom Sheet Component
+// What's Happening Bottom Sheet Component - Draggable
 const WhatsHappeningSheet = ({
   region,
   visible,
@@ -345,6 +346,68 @@ const WhatsHappeningSheet = ({
   const [selectedDate, setSelectedDate] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [currentEventIndex, setCurrentEventIndex] = useState(0);
+  
+  // Snap points for the bottom sheet
+  const SNAP_COLLAPSED = SCREEN_HEIGHT - 80; // Just handle showing
+  const SNAP_PARTIAL = SCREEN_HEIGHT - 220; // Default view
+  const SNAP_EXPANDED = 100; // Nearly full screen
+  
+  const translateY = useRef(new Animated.Value(SNAP_PARTIAL)).current;
+  const dragOffset = useRef(new Animated.Value(0)).current;
+  
+  const handleGestureEvent = Animated.event(
+    [{ nativeEvent: { translationY: dragOffset } }],
+    { useNativeDriver: true }
+  );
+
+  const handleGesture = ({ nativeEvent }: any) => {
+    if (nativeEvent.state === State.END) {
+      const { translationY, velocityY } = nativeEvent;
+      const currentY = translateY.__getValue();
+      const finalY = currentY + translationY;
+      
+      let targetSnap = SNAP_PARTIAL;
+      
+      // Determine target snap point based on position and velocity
+      if (velocityY > 500) {
+        // Fast downward swipe - collapse
+        targetSnap = SNAP_COLLAPSED;
+      } else if (velocityY < -500) {
+        // Fast upward swipe - expand
+        targetSnap = SNAP_EXPANDED;
+      } else {
+        // Snap to nearest position
+        const distances = [
+          Math.abs(finalY - SNAP_EXPANDED),
+          Math.abs(finalY - SNAP_PARTIAL),
+          Math.abs(finalY - SNAP_COLLAPSED),
+        ];
+        const minIndex = distances.indexOf(Math.min(...distances));
+        targetSnap = [SNAP_EXPANDED, SNAP_PARTIAL, SNAP_COLLAPSED][minIndex];
+      }
+      
+      // Animate to target position
+      Animated.parallel([
+        Animated.spring(translateY, {
+          toValue: targetSnap,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 10,
+          velocity: velocityY / 1000,
+        }),
+        Animated.spring(dragOffset, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 10,
+        }),
+      ]).start();
+    } else if (nativeEvent.state === State.BEGAN) {
+      dragOffset.setValue(0);
+    }
+  };
+
+  const combinedTranslateY = Animated.add(translateY, dragOffset);
 
   // Filter events based on map region and selected date
   const filteredEvents = useMemo(() => {
@@ -404,10 +467,42 @@ const WhatsHappeningSheet = ({
   if (!visible) return null;
 
   return (
-    <View className="bg-white rounded-t-3xl shadow-lg" style={{ height: 220 }}>
-      <View className="items-center py-2">
-        <View className="w-10 h-1 bg-gray-300 rounded-full" />
-      </View>
+    <PanGestureHandler
+      onGestureEvent={handleGestureEvent}
+      onHandlerStateChange={handleGesture}
+      activeOffsetY={[-10, 10]}
+      failOffsetX={[-15, 15]}
+    >
+      <Animated.View 
+        className="bg-white rounded-t-3xl shadow-lg absolute left-0 right-0 bottom-0" 
+        style={{
+          height: SCREEN_HEIGHT,
+          transform: [{ translateY: combinedTranslateY }],
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.1,
+          shadowRadius: 12,
+          elevation: 8,
+        }}
+      >
+        {/* Draggable Handle - Interactive area */}
+        <TouchableOpacity 
+          activeOpacity={1}
+          className="items-center py-3"
+          onPress={() => {
+            // Toggle between partial and expanded on tap
+            const currentY = translateY.__getValue();
+            const targetY = currentY === SNAP_PARTIAL ? SNAP_EXPANDED : SNAP_PARTIAL;
+            Animated.spring(translateY, {
+              toValue: targetY,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 10,
+            }).start();
+          }}
+        >
+          <View className="w-12 h-1.5 bg-gray-400 rounded-full" />
+        </TouchableOpacity>
 
       {/* Header with Date Filters */}
       <View className="px-4 pb-2">
@@ -536,7 +631,8 @@ const WhatsHappeningSheet = ({
           <Text className="text-gray-500 mt-2">No events found for this date</Text>
         </View>
       )}
-    </View>
+      </Animated.View>
+    </PanGestureHandler>
   );
 };
 

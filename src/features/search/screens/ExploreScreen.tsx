@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Pressable, Dimensions } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Pressable, Dimensions, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 2;
@@ -22,81 +23,191 @@ const exploreImages = [
 
 export const ExploreScreen = () => {
   const [activeFeed, setActiveFeed] = useState<'explore' | 'friends'>('explore');
+  const translateX = useRef(new Animated.Value(0)).current;
+  const dragOffset = useRef(new Animated.Value(0)).current;
+  const currentIndex = useRef(0); // 0 = explore, 1 = friends
+  
+  const handleGestureEvent = Animated.event(
+    [{ nativeEvent: { translationX: dragOffset } }],
+    { useNativeDriver: true }
+  );
+
+  const handleSwipe = ({ nativeEvent }: any) => {
+    if (nativeEvent.state === State.END) {
+      const { translationX, velocityX } = nativeEvent;
+      
+      // Calculate which page to snap to based on drag distance and velocity
+      let targetIndex = currentIndex.current;
+      
+      // Threshold: 30% of screen width or fast velocity
+      const threshold = SCREEN_WIDTH * 0.3;
+      
+      if (translationX < -threshold || velocityX < -500) {
+        // Dragged left - go to friends (if not already there)
+        targetIndex = Math.min(1, currentIndex.current + 1);
+      } else if (translationX > threshold || velocityX > 500) {
+        // Dragged right - go to explore (if not already there)
+        targetIndex = Math.max(0, currentIndex.current - 1);
+      }
+      
+      // Snap to the target page
+      currentIndex.current = targetIndex;
+      const targetFeed = targetIndex === 0 ? 'explore' : 'friends';
+      setActiveFeed(targetFeed);
+      
+      // Animate to final position
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: -targetIndex * SCREEN_WIDTH,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 10,
+          velocity: velocityX / SCREEN_WIDTH,
+        }),
+        Animated.spring(dragOffset, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 10,
+        }),
+      ]).start();
+    } else if (nativeEvent.state === State.BEGAN) {
+      // Reset drag offset when starting new gesture
+      dragOffset.setValue(0);
+    }
+  };
+
+  const switchToFeed = (feed: 'explore' | 'friends') => {
+    const targetIndex = feed === 'explore' ? 0 : 1;
+    currentIndex.current = targetIndex;
+    setActiveFeed(feed);
+    
+    Animated.parallel([
+      Animated.spring(translateX, {
+        toValue: -targetIndex * SCREEN_WIDTH,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 10,
+      }),
+      Animated.timing(dragOffset, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // Combine base position and drag offset for smooth tracking
+  const combinedTranslateX = Animated.add(translateX, dragOffset);
+  
+  // Calculate slider position for the underline indicator (0 to 1)
+  const slidePosition = combinedTranslateX.interpolate({
+    inputRange: [-SCREEN_WIDTH, 0],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={['top']}>
-      {/* Feed toggle (Friends / Explore) */}
-      <View className="px-4 pt-3 pb-2 bg-white border-b border-gray-100">
-        <View className="flex-row bg-gray-100 rounded-full p-1">
+      {/* Feed toggle (Explore / Friends) - Modernized underline style */}
+      <View style={{ backgroundColor: '#FFFFFF', paddingTop: 12, paddingBottom: 8 }}>
+        <View style={{ 
+          flexDirection: 'row', 
+          position: 'relative',
+          paddingHorizontal: 16,
+        }}>
           <Pressable
             style={{
               flex: 1,
               alignItems: 'center',
-              paddingVertical: 6,
-              borderRadius: 9999,
-              backgroundColor: activeFeed === 'friends' ? '#FFFFFF' : 'transparent',
-              ...(activeFeed === 'friends' && {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
-              }),
+              paddingBottom: 10,
             }}
-            onPress={() => setActiveFeed('friends')}
+            onPress={() => switchToFeed('explore')}
           >
             <Text
               style={{
-                fontSize: 12,
-                fontWeight: '600',
-                color: activeFeed === 'friends' ? '#111827' : '#6B7280',
-              }}
-            >
-              Friends
-            </Text>
-          </Pressable>
-          <Pressable
-            style={{
-              flex: 1,
-              alignItems: 'center',
-              paddingVertical: 6,
-              borderRadius: 9999,
-              backgroundColor: activeFeed === 'explore' ? '#FFFFFF' : 'transparent',
-              ...(activeFeed === 'explore' && {
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.1,
-                shadowRadius: 2,
-                elevation: 2,
-              }),
-            }}
-            onPress={() => setActiveFeed('explore')}
-          >
-            <Text
-              style={{
-                fontSize: 12,
-                fontWeight: '600',
-                color: activeFeed === 'explore' ? '#111827' : '#6B7280',
+                fontSize: 15,
+                fontWeight: activeFeed === 'explore' ? '600' : '500',
+                color: activeFeed === 'explore' ? '#111827' : '#9CA3AF',
+                letterSpacing: 0.2,
               }}
             >
               Explore
             </Text>
           </Pressable>
+          
+          <Pressable
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              paddingBottom: 10,
+            }}
+            onPress={() => switchToFeed('friends')}
+          >
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: activeFeed === 'friends' ? '600' : '500',
+                color: activeFeed === 'friends' ? '#111827' : '#9CA3AF',
+                letterSpacing: 0.2,
+              }}
+            >
+              Friends
+            </Text>
+          </Pressable>
+          
+          {/* Animated underline indicator - perfectly centered under text */}
+          <Animated.View
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              height: 3,
+              width: 60,
+              backgroundColor: '#111827',
+              borderRadius: 1.5,
+              left: 16 + (SCREEN_WIDTH - 32) / 4 - 30, // Center under Explore button
+              transform: [{
+                translateX: slidePosition.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, (SCREEN_WIDTH - 32) / 2], // Move to center of Friends button
+                }),
+              }],
+            }}
+          />
+          
+          {/* Full width bottom border */}
+          <View style={{ 
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 1,
+            backgroundColor: '#E5E7EB',
+          }} />
         </View>
-        <Text className="mt-2 text-xs text-gray-500">
-          {activeFeed === 'friends'
-            ? 'See spots your friends are saving and talking about.'
-            : 'Find new places, events, and scenes around you.'}
-        </Text>
       </View>
 
-      {/* Content */}
-      {activeFeed === 'friends' ? (
-        // Blank Friends page
-        <View className="flex-1 bg-gray-50" />
-      ) : (
-        // Explore Grid
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      {/* Swipeable Content */}
+      <PanGestureHandler
+        onGestureEvent={handleGestureEvent}
+        onHandlerStateChange={handleSwipe}
+        activeOffsetX={[-30, 30]}
+        failOffsetY={[-20, 20]}
+        minPointers={1}
+        maxPointers={1}
+      >
+        <Animated.View style={{ flex: 1 }}>
+          <Animated.View
+            style={{
+              flexDirection: 'row',
+              width: SCREEN_WIDTH * 2,
+              height: '100%',
+              transform: [{ translateX: combinedTranslateX }],
+            }}
+          >
+            {/* Explore Grid */}
+            <View style={{ width: SCREEN_WIDTH, height: '100%' }}>
+              <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
           <View className="flex-row flex-wrap">
             {/* Row 1: 3 small */}
             <View className="flex-row">
@@ -179,8 +290,22 @@ export const ExploreScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
-      )}
+              </ScrollView>
+            </View>
+
+            {/* Friends page */}
+            <View style={{ width: SCREEN_WIDTH, height: '100%' }}>
+              <ScrollView className="flex-1 bg-gray-50" showsVerticalScrollIndicator={false}>
+                <View className="p-4">
+                  <Text className="text-sm text-gray-500 text-center">
+                    Friends feed coming soon
+                  </Text>
+                </View>
+              </ScrollView>
+            </View>
+          </Animated.View>
+        </Animated.View>
+      </PanGestureHandler>
     </SafeAreaView>
   );
 };
