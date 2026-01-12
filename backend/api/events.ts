@@ -188,5 +188,3 @@ function mapCategoryToTicketmasterClassification(category: string): string | nul
 function getFallbackEvents(): Event[] {
   return [];
 }
-
-
