@@ -10,19 +10,32 @@ export interface ParsedQuery {
   rawQuery: string;
 }
 
-// Common venue type keywords
+// Enhanced venue type keywords with descriptors and activities
 const VENUE_KEYWORDS = [
-  'restaurant', 'restaurants', 'food', 'dining',
-  'bar', 'bars', 'pub', 'pubs', 'brewery', 'breweries',
+  'restaurant', 'restaurants', 'food', 'dining', 'eat', 'places to eat',
+  'bar', 'bars', 'pub', 'pubs', 'brewery', 'breweries', 'drinks',
   'cafe', 'cafes', 'coffee', 'coffee shop', 'coffee shops',
-  'hotel', 'hotels', 'lodging', 'accommodation',
+  'hotel', 'hotels', 'lodging', 'accommodation', 'stay',
   'museum', 'museums', 'gallery', 'galleries', 'art',
-  'park', 'parks', 'beach', 'beaches',
-  'shopping', 'mall', 'malls', 'store', 'stores', 'market', 'markets',
+  'park', 'parks', 'beach', 'beaches', 'outdoor',
+  'shopping', 'mall', 'malls', 'store', 'stores', 'market', 'markets', 'shop',
   'gym', 'gyms', 'fitness', 'workout',
   'spa', 'spas', 'massage', 'wellness',
   'sushi', 'pizza', 'burger', 'burgers', 'italian', 'mexican', 'chinese', 'thai',
+  'brunch', 'breakfast', 'lunch', 'dinner',
 ];
+
+// Price descriptors
+const PRICE_DESCRIPTORS = ['cheap', 'affordable', 'budget', 'expensive', 'luxury', 'upscale', 'pricey'];
+
+// Vibe/atmosphere descriptors
+const VIBE_DESCRIPTORS = ['romantic', 'cozy', 'lively', 'quiet', 'family-friendly', 'casual', 'fancy', 'trendy'];
+
+// Time context keywords
+const TIME_KEYWORDS = ['tonight', 'today', 'now', 'this weekend', 'tomorrow'];
+
+// Location context keywords
+const LOCATION_CONTEXT = ['near me', 'nearby', 'close', 'around here', 'in the area'];
 
 // Common event type keywords
 const EVENT_KEYWORDS = [
@@ -47,7 +60,8 @@ const LOCATION_INDICATORS = [
 ];
 
 /**
- * Classifies a search query into location, venue type, event type, or hybrid
+ * Enhanced classifier for natural language queries
+ * Handles: "cheap sushi near me", "things to do tonight", "romantic dinner"
  */
 export const classifyQuery = (query: string): ParsedQuery => {
   const lowerQuery = query.toLowerCase().trim();
@@ -62,6 +76,9 @@ export const classifyQuery = (query: string): ParsedQuery => {
     };
   }
 
+  // Handle "near me" queries (use current location)
+  const hasNearMe = LOCATION_CONTEXT.some(ctx => lowerQuery.includes(ctx));
+  
   // Check for venue type keywords
   const hasVenueKeyword = VENUE_KEYWORDS.some(keyword => 
     lowerQuery.includes(keyword.toLowerCase())
@@ -77,7 +94,17 @@ export const classifyQuery = (query: string): ParsedQuery => {
     lowerQuery.includes(indicator.toLowerCase())
   );
 
-  // Hybrid query: "bars in brooklyn", "coffee shops near me"
+  // "near me" + venue type: "sushi near me", "bars around here"
+  if (hasNearMe && (hasVenueKeyword || hasEventKeyword)) {
+    return {
+      type: 'venue_type', // Use current location, just filter by type
+      venueTypes: hasVenueKeyword ? extractVenueTypes(lowerQuery) : undefined,
+      eventTypes: hasEventKeyword ? extractEventTypes(lowerQuery) : undefined,
+      rawQuery: query,
+    };
+  }
+
+  // Hybrid query: "bars in brooklyn", "coffee shops near central park"
   if ((hasVenueKeyword || hasEventKeyword) && hasLocationIndicator) {
     const extracted = extractHybridQuery(lowerQuery);
     return {
@@ -89,7 +116,7 @@ export const classifyQuery = (query: string): ParsedQuery => {
     };
   }
 
-  // Venue type only: "sushi", "coffee shops", "bars"
+  // Venue type only: "sushi", "coffee shops", "bars", "things to do"
   if (hasVenueKeyword) {
     return {
       type: 'venue_type',
@@ -98,7 +125,7 @@ export const classifyQuery = (query: string): ParsedQuery => {
     };
   }
 
-  // Event type only: "concerts", "jazz shows"
+  // Event type only: "concerts", "jazz shows", "things to do tonight"
   if (hasEventKeyword) {
     return {
       type: 'event_type',

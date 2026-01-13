@@ -1131,54 +1131,6 @@ const WhatsHappeningSheet = ({
       </View>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Date Filter - Above Events */}
-        <View className="px-4 pt-2 pb-3">
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingRight: 16 }}
-          >
-            {(['today', 'tomorrow', 'weekend'] as DateFilter[]).map((filter) => (
-              <TouchableOpacity
-                key={filter}
-                onPress={() => setSelectedDate(filter)}
-                className={`px-4 py-1.5 rounded-full mr-2 ${
-                  selectedDate === filter ? 'bg-gray-900' : 'bg-gray-100'
-                }`}
-              >
-                <Text
-                  className={`text-sm font-medium capitalize ${
-                    selectedDate === filter ? 'text-white' : 'text-gray-700'
-                  }`}
-                >
-                  {filter}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity
-              onPress={() => setSelectedDate('custom')}
-              className={`px-4 py-1.5 rounded-full flex-row items-center ${
-                selectedDate === 'custom' ? 'bg-gray-900' : 'bg-gray-100'
-              }`}
-            >
-              <Icon
-                name="calendar"
-                size={12}
-                color={selectedDate === 'custom' ? '#FFFFFF' : iconColors.active}
-              />
-              <Text
-                className={`text-sm font-medium ml-1.5 ${
-                  selectedDate === 'custom' ? 'text-white' : 'text-gray-700'
-                }`}
-              >
-                {customDate
-                  ? customDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                  : 'Date'}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
         {/* Events Section */}
         <View className="mb-4">
           <View className="px-4 mb-3">
@@ -1752,9 +1704,14 @@ export const MapScreen = () => {
     );
   };
 
-  // Load remote events and places whenever the region changes meaningfully.
+  // Load remote events and places dynamically as map moves (with debouncing)
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
     const loadData = async () => {
+      if (!isMounted) return;
+      
       try {
         setIsLoadingRemote(true);
         const centerLat = region.latitude;
@@ -1776,19 +1733,31 @@ export const MapScreen = () => {
           }),
         ]);
 
-        setRemoteEvents(events);
-        setRemotePlaces(places);
+        if (isMounted) {
+          setRemoteEvents(events);
+          setRemotePlaces(places);
+        }
       } catch (error) {
         if (__DEV__) {
           console.log('Error loading map data', error);
         }
       } finally {
-        setIsLoadingRemote(false);
+        if (isMounted) {
+          setIsLoadingRemote(false);
+        }
       }
     };
 
-    loadData();
-  }, [region.latitude, region.longitude]);
+    // Debounce: Wait 500ms after user stops moving map before loading data
+    timeoutId = setTimeout(() => {
+      loadData();
+    }, 500);
+    
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [region.latitude, region.longitude]); // Dynamically load as map moves
 
   // Generate location-aware mock data based on user's actual location
   // Regenerates ONLY when user location is acquired, then stays stable
@@ -1945,6 +1914,8 @@ export const MapScreen = () => {
           onPress={handleMapPress}
           showsUserLocation={true}
           showsMyLocationButton={false}
+          showsPointsOfInterest={false}
+          showsBuildings={false}
           mapType="standard"
           scrollEnabled={true}
           zoomEnabled={true}
@@ -2001,8 +1972,8 @@ export const MapScreen = () => {
                     800
                   );
                 }}
-              />
-            ))}
+            />
+          ))}
         </MapView>
 
         <View className="absolute top-4 left-4 right-4">

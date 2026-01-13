@@ -57,9 +57,10 @@ const GOOGLE_PLACES_URL =
   'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
 
 export async function getPlaces(req: Request, res: Response) {
-  if (!GOOGLE_PLACES_KEY) {
-    console.error('Missing GOOGLE_PLACES_API_KEY');
-    return res.json(getFallbackPlaces());
+  // Quick validation - return empty immediately if no API key
+  if (!GOOGLE_PLACES_KEY || GOOGLE_PLACES_KEY === 'your_key_here' || GOOGLE_PLACES_KEY.length < 10) {
+    console.log('⚠️  Google Places API key not configured - returning empty array');
+    return res.json([]);
   }
 
   const lat = Number(req.query.lat);
@@ -83,15 +84,23 @@ export async function getPlaces(req: Request, res: Response) {
 
     const { data } = await axios.get<GooglePlacesResponseApi>(GOOGLE_PLACES_URL, {
       params,
+      timeout: 8000, // 8 second timeout (much faster than 30s default)
     });
 
     const results = data.results ?? [];
     const places = results.slice(0, 50).map(normalizeGooglePlace).filter(Boolean);
+    console.log(`✅ Fetched ${places.length} places from Google`);
 
     return res.json(places);
-  } catch (err) {
-    console.error('Google Places API error', err);
-    return res.json(getFallbackPlaces());
+  } catch (err: any) {
+    if (err.code === 'ECONNABORTED') {
+      console.error('⏱️  Google Places API timeout');
+    } else if (err.response?.status === 401 || err.response?.status === 403) {
+      console.error('🔒 Google Places API: Invalid API key or not enabled');
+    } else {
+      console.error('❌ Google Places API error:', err.message);
+    }
+    return res.json([]);
   }
 }
 

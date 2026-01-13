@@ -139,8 +139,9 @@ export const FilterModal: React.FC<FilterModalProps> = ({
         <TouchableOpacity 
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
+          className="max-h-[85%]"
         >
-          <View className="bg-white rounded-t-3xl max-h-[85%]">
+          <View className="bg-white rounded-t-3xl" style={{ maxHeight: '85%', height: 'auto' }}>
           {/* Header */}
           <View className="px-4 py-4 border-b border-gray-100">
             <View className="flex-row items-center justify-between mb-2">
@@ -152,7 +153,12 @@ export const FilterModal: React.FC<FilterModalProps> = ({
             <Text className="text-sm text-gray-500">Refine your search results</Text>
           </View>
 
-          <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+          <ScrollView 
+            className="flex-1" 
+            showsVerticalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 1 }}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          >
             {/* Search Within Results */}
             <View className="px-4 py-4 border-b border-gray-100">
               <View className="flex-row items-center mb-3">

@@ -66,9 +66,10 @@ const TM_API_KEY = process.env.TICKETMASTER_API_KEY;
 const TM_DISCOVERY_URL = 'https://app.ticketmaster.com/discovery/v2/events.json';
 
 export async function getEvents(req: Request, res: Response) {
-  if (!TM_API_KEY) {
-    console.error('Missing TICKETMASTER_API_KEY');
-    return res.json(getFallbackEvents());
+  // Quick validation - return empty immediately if no API key
+  if (!TM_API_KEY || TM_API_KEY === 'your_key_here' || TM_API_KEY.length < 10) {
+    console.log('⚠️  Ticketmaster API key not configured - returning empty array');
+    return res.json([]);
   }
 
   const lat = Number(req.query.lat);
@@ -105,15 +106,23 @@ export async function getEvents(req: Request, res: Response) {
 
     const { data } = await axios.get<TicketmasterResponseApi>(TM_DISCOVERY_URL, {
       params,
+      timeout: 8000, // 8 second timeout (much faster than 30s default)
     });
 
     const rawEvents = data._embedded?.events ?? [];
     const events = rawEvents.slice(0, 50).map(normalizeTicketmasterEvent).filter(Boolean);
+    console.log(`✅ Fetched ${events.length} events from Ticketmaster`);
 
     return res.json(events);
-  } catch (err) {
-    console.error('Ticketmaster API error', err);
-    return res.json(getFallbackEvents());
+  } catch (err: any) {
+    if (err.code === 'ECONNABORTED') {
+      console.error('⏱️  Ticketmaster API timeout');
+    } else if (err.response?.status === 401) {
+      console.error('🔒 Ticketmaster API: Invalid API key');
+    } else {
+      console.error('❌ Ticketmaster API error:', err.message);
+    }
+    return res.json([]);
   }
 }
 

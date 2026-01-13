@@ -3,8 +3,6 @@
 
 import type { Request, Response } from 'express';
 import axios from 'axios';
-import { getPlaces } from './places';
-import { getEvents } from './events';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
