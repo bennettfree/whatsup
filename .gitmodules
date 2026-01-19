@@ -1,0 +1,3 @@
+[submodule "Whats-up-app1"]
+	path = Whats-up-app1
+	url = https://github.com/bennettfree/whatsup.git
