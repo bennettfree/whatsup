@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { getEvents } from './api/events.js';
-import { getPlaces } from './api/places.js';
-import { aiSearch } from './api/ai-search.js';
+import { getEvents } from './api/events';
+import { getPlaces } from './api/places';
+import { aiSearch } from './api/ai-search';
+import { searchHandler } from './api/search';
 
 const app = express();
 
@@ -19,7 +20,8 @@ app.get('/', (req, res) => {
       health: '/api/health',
       places: '/api/places',
       events: '/api/events',
-      aiSearch: '/api/ai-search'
+      aiSearch: '/api/ai-search',
+      search: '/api/search'
     }
   });
 });
@@ -47,12 +49,17 @@ app.post('/api/ai-search', (req, res) => {
   return aiSearch(req, res);
 });
 
+app.post('/api/search', async (req, res) => {
+  console.log('📍 POST /api/search called');
+  return searchHandler(req, res);
+});
+
 // Health check route
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     message: 'Backend is running',
-    endpoints: ['/api/places', '/api/events', '/api/ai-search']
+    endpoints: ['/api/places', '/api/events', '/api/ai-search', '/api/search']
   });
 });
 

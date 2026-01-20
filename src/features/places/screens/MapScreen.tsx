@@ -294,6 +294,7 @@ const WhatsHappeningSheet = ({
   const thumbsDown = useSavedStore((s) => s.thumbsDown);
   const thumbsUpCount = useSavedStore((s) => (selectedId ? (s.thumbsUpCountById[selectedId] ?? 0) : 0));
   const myVote = useSavedStore((s) => (selectedId ? (s.myVoteById[selectedId] ?? 'none') : 'none'));
+  const isInnerScrollActiveRef = useRef(false);
 
   // Notify parent of sheet position changes
   useEffect(() => {
@@ -333,13 +334,19 @@ const WhatsHappeningSheet = ({
     }
   }, [targetPosition, animationKey, translateY, SNAP_HIDDEN, SNAP_COLLAPSED, SNAP_PARTIAL, SNAP_THREE_QUARTER, SNAP_EXPANDED]);
   
-  const handleGestureEvent = Animated.event(
-    [{ nativeEvent: { translationY: dragOffset } }],
-    { useNativeDriver: true }
-  );
+  const handleGestureEvent = ({ nativeEvent }: any) => {
+    // When the user is scrolling the inner detail content, don't let the sheet
+    // pan handler "steal" the gesture and snap the sheet on release.
+    if (isInnerScrollActiveRef.current) return;
+    dragOffset.setValue(nativeEvent.translationY);
+  };
 
   const handleGesture = ({ nativeEvent }: any) => {
     if (nativeEvent.state === State.END) {
+      if (isInnerScrollActiveRef.current) {
+        dragOffset.setValue(0);
+        return;
+      }
       const { translationY, velocityY } = nativeEvent;
       const currentY = (translateY as any).__getValue();
       const finalY = currentY + translationY;
@@ -435,6 +442,18 @@ const WhatsHappeningSheet = ({
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
 
+  const formatDistanceMeters = (distM?: number): string => {
+    if (distM == null || !Number.isFinite(distM)) return '';
+    if (distM < 1000) return `${Math.round(distM)} m`;
+    return `${(distM / 1000).toFixed(1)} km`;
+  };
+
+  const formatPriceLevel = (level?: number): string => {
+    if (level == null || !Number.isFinite(level)) return '';
+    const clamped = Math.max(1, Math.min(4, Math.round(level)));
+    return '$'.repeat(clamped);
+  };
+
   // Don't return null - keep component mounted for animations
   // The sheet position is controlled by translateY instead
 
@@ -444,6 +463,8 @@ const WhatsHappeningSheet = ({
 
     const isPlace = selectedItem.type === 'place';
     const item = selectedItem.data as SearchResultItem;
+    const distanceText = formatDistanceMeters(item.distanceMeters);
+    const priceText = formatPriceLevel(item.priceLevel);
 
     const handleDirections = () => {
       const lat = item.location.latitude;
@@ -461,7 +482,7 @@ const WhatsHappeningSheet = ({
     };
 
     return (
-      <>
+      <View style={{ flex: 1 }}>
         {/* Header with Back Button */}
         <View className="px-4 py-3 border-b border-gray-100">
           <TouchableOpacity
@@ -473,11 +494,71 @@ const WhatsHappeningSheet = ({
           </TouchableOpacity>
         </View>
 
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          onScrollBeginDrag={() => {
+            isInnerScrollActiveRef.current = true;
+          }}
+          onScrollEndDrag={() => {
+            isInnerScrollActiveRef.current = false;
+          }}
+          onMomentumScrollBegin={() => {
+            isInnerScrollActiveRef.current = true;
+          }}
+          onMomentumScrollEnd={() => {
+            isInnerScrollActiveRef.current = false;
+          }}
+        >
           <View className="px-4 pt-4 pb-4">
-            <Text className="text-2xl font-bold text-gray-900 mb-1.5 leading-tight">
-              {item.title}
-            </Text>
+            {/* Header Image */}
+            {item.imageUrl ? (
+              <View className="rounded-2xl overflow-hidden mb-4">
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={{ width: SCREEN_WIDTH - 32, height: 220 }}
+                  contentFit="cover"
+                />
+              </View>
+            ) : (
+              <View className="rounded-2xl overflow-hidden mb-4 bg-gray-100" style={{ height: 220 }} />
+            )}
+
+            <Text className="text-2xl font-bold text-gray-900 mb-2 leading-tight">{item.title}</Text>
+
+            {/* Category + Distance */}
+            <View className="flex-row items-center flex-wrap mb-3">
+              {!!item.category && (
+                <View className="bg-gray-100 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-xs font-semibold text-gray-700">{item.category}</Text>
+                </View>
+              )}
+              {!!distanceText && (
+                <View className="bg-gray-100 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-xs font-semibold text-gray-700">{distanceText} away</Text>
+                </View>
+              )}
+              {isPlace && !!priceText && (
+                <View className="bg-gray-100 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-xs font-semibold text-gray-700">{priceText}</Text>
+                </View>
+              )}
+              {isPlace && typeof item.isOpenNow === 'boolean' && (
+                <View
+                  className={`px-3 py-1 rounded-full mr-2 mb-2 ${item.isOpenNow ? 'bg-green-100' : 'bg-red-100'}`}
+                >
+                  <Text className={`text-xs font-semibold ${item.isOpenNow ? 'text-green-700' : 'text-red-700'}`}>
+                    {item.isOpenNow ? 'Open now' : 'Closed'}
+                  </Text>
+                </View>
+              )}
+              {!isPlace && item.isFree && (
+                <View className="bg-green-100 px-3 py-1 rounded-full mr-2 mb-2">
+                  <Text className="text-xs font-semibold text-green-700">FREE</Text>
+                </View>
+              )}
+            </View>
 
             {!!item.reason && (
               <View className="mb-3">
@@ -490,12 +571,56 @@ const WhatsHappeningSheet = ({
               </View>
             )}
 
-            {!!item.startDate && item.type === 'event' && (
-              <View className="flex-row items-center mb-2">
-                <Icon name="calendar" size={14} color={iconColors.default} />
-                <Text className="text-base text-gray-900 ml-2">
-                  {formatEventDate(item.startDate)}, {formatEventTime(item.startDate)}
-                </Text>
+            {/* Event core fields */}
+            {item.type === 'event' && (
+              <View className="mb-2">
+                {!!item.venueName && (
+                  <View className="flex-row items-center mb-2">
+                    <Icon name="map-pin" size={14} color={iconColors.default} />
+                    <Text className="text-base text-gray-900 ml-2">{item.venueName}</Text>
+                  </View>
+                )}
+                {!!item.startDate && (
+                  <View className="flex-row items-center mb-2">
+                    <Icon name="calendar" size={14} color={iconColors.default} />
+                    <Text className="text-base text-gray-900 ml-2">
+                      {formatEventDate(item.startDate)}, {formatEventTime(item.startDate)}
+                      {!!item.endDate ? ` – ${formatEventDate(item.endDate)}` : ''}
+                    </Text>
+                  </View>
+                )}
+                {item.isFree ? (
+                  <View className="flex-row items-center mb-2">
+                    <Icon name="tag" size={14} color={iconColors.default} />
+                    <Text className="text-base text-gray-900 ml-2">Free</Text>
+                  </View>
+                ) : (
+                  (item.priceMin != null || item.priceMax != null) && (
+                    <View className="flex-row items-center mb-2">
+                      <Icon name="tag" size={14} color={iconColors.default} />
+                      <Text className="text-base text-gray-900 ml-2">
+                        {item.priceMin != null ? `$${item.priceMin}` : ''}
+                        {item.priceMin != null && item.priceMax != null ? ' – ' : ''}
+                        {item.priceMax != null ? `$${item.priceMax}` : ''}
+                      </Text>
+                    </View>
+                  )
+                )}
+              </View>
+            )}
+
+            {/* Place core fields */}
+            {item.type === 'place' && (
+              <View className="mb-2">
+                {(item.rating != null || item.reviewCount != null) && (
+                  <View className="flex-row items-center mb-2">
+                    <Icon name="star" size={14} color="#F59E0B" />
+                    <Text className="text-base text-gray-900 ml-2">
+                      {item.rating != null ? item.rating.toFixed(1) : '—'}
+                      {!!item.reviewCount ? ` (${item.reviewCount})` : ''}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -508,89 +633,98 @@ const WhatsHappeningSheet = ({
               </TouchableOpacity>
             )}
 
-            {item.imageUrl && (
-              <View className="mt-3 rounded-2xl overflow-hidden">
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  style={{ width: SCREEN_WIDTH - 32, height: 200 }}
-                  contentFit="cover"
-                />
+            {/* Social context (placeholder until friends/chat data is wired) */}
+            <View className="mt-5">
+              <Text className="text-sm font-bold text-gray-900 mb-2">Social</Text>
+              <View className="bg-gray-50 rounded-2xl p-4">
+                <Text className="text-sm text-gray-700">Friends who saved: —</Text>
+                <Text className="text-sm text-gray-700 mt-1">{item.type === 'event' ? 'Friends going: —' : 'Friends who went: —'}</Text>
+                <Text className="text-xs text-gray-500 mt-2">This will populate when social graph & chat links are connected.</Text>
               </View>
-            )}
+            </View>
+
+            {/* Associated chat/plan context (placeholder) */}
+            <View className="mt-4 mb-2">
+              <Text className="text-sm font-bold text-gray-900 mb-2">Context</Text>
+              <View className="bg-gray-50 rounded-2xl p-4">
+                <Text className="text-sm text-gray-700">Linked group: —</Text>
+                <Text className="text-sm text-gray-700 mt-1">Date: —</Text>
+              </View>
+            </View>
+
+            {/* Actions (scrollable) */}
+            <View className="mt-5">
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  onPress={() => toggleSave(item as any)}
+                  className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                >
+                  <Icon name="bookmark" size={22} color={isSaved ? iconColors.primary : iconColors.active} />
+                  <Text className="text-sm font-bold text-gray-900 mt-1.5">Save</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => thumbsUp(item.id)}
+                  className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                >
+                  <Feather name="thumbs-up" size={22} color={myVote === 'up' ? iconColors.active : iconColors.default} />
+                  <Text className="text-sm font-bold text-gray-900 mt-1.5">{thumbsUpCount}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => thumbsDown(item.id)}
+                  className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 2,
+                  }}
+                >
+                  <Feather name="thumbs-down" size={22} color={myVote === 'down' ? iconColors.active : iconColors.default} />
+                  <Text className="text-sm font-bold text-gray-900 mt-1.5">Private</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleOpenUrl}
+                  className="flex-1 py-4 rounded-2xl items-center bg-gray-900 active:bg-gray-800"
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 5,
+                  }}
+                >
+                  {isPlace ? (
+                    <Icon name="navigation" size={22} color="#FFFFFF" />
+                  ) : (
+                    <MaterialCommunityIcons name="ticket-confirmation" size={22} color="#FFFFFF" />
+                  )}
+                  <Text className="text-sm font-bold text-white mt-1.5">
+                    {isPlace ? 'Maps' : (item.url ? 'Tickets' : 'Maps')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </ScrollView>
-
-        {/* Action Buttons - Modern Design */}
-        <View className="px-4 pb-6 pt-4 bg-white border-t border-gray-100">
-          <View className="flex-row gap-3">
-            <TouchableOpacity
-              onPress={() => toggleSave(item as any)}
-              className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
-              style={{ 
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2
-              }}
-            >
-              <Icon name="bookmark" size={22} color={isSaved ? iconColors.primary : iconColors.active} />
-              <Text className="text-sm font-bold text-gray-900 mt-1.5">Save</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => thumbsUp(item.id)}
-              className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
-              style={{ 
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2
-              }}
-            >
-              <Feather name="thumbs-up" size={22} color={myVote === 'up' ? iconColors.active : iconColors.default} />
-              <Text className="text-sm font-bold text-gray-900 mt-1.5">{thumbsUpCount}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => thumbsDown(item.id)}
-              className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
-              style={{ 
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 2
-              }}
-            >
-              <Feather name="thumbs-down" size={22} color={myVote === 'down' ? iconColors.active : iconColors.default} />
-              <Text className="text-sm font-bold text-gray-900 mt-1.5">Private</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={handleOpenUrl}
-              className="flex-1 py-4 rounded-2xl items-center bg-gray-900 active:bg-gray-800"
-              style={{ 
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.3,
-                shadowRadius: 8,
-                elevation: 5
-              }}
-            >
-              {isPlace ? (
-                <Icon name="navigation" size={22} color="#FFFFFF" />
-              ) : (
-                <MaterialCommunityIcons name="ticket-confirmation" size={22} color="#FFFFFF" />
-              )}
-              <Text className="text-sm font-bold text-white mt-1.5">
-                {item.url ? 'Open' : 'Directions'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </>
+      </View>
     );
   };
 
@@ -796,12 +930,13 @@ const WhatsHappeningSheet = ({
           width: SCREEN_WIDTH * 2,
           flexDirection: 'row',
           transform: [{ translateX: slideX }],
+          flex: 1,
         }}
       >
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
           {renderSearchResults()}
         </View>
-        <View style={{ width: SCREEN_WIDTH }}>
+        <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
           {renderDetailView()}
         </View>
       </Animated.View>
@@ -1094,10 +1229,6 @@ export const MapScreen = () => {
     setSheetTargetPosition('three-quarter');
   };
 
-  const handleBackFromDetail = () => {
-    setSelectedItemForDetail(null);
-  };
-
   const handleSearchFocus = () => {
     // Show sheet in collapsed mode when search is focused (if hidden)
     setIsSheetVisible(true);
@@ -1285,8 +1416,9 @@ export const MapScreen = () => {
       setActiveEventId(id);
       setActivePlaceId(null);
     }
-    setDetailItem(data as SearchResultItem);
-    setIsDetailVisible(true);
+    setSelectedItemForDetail({ type, data: data as SearchResultItem });
+    setIsSheetVisible(true);
+    setSheetTargetPosition('expanded');
     
     // Animate map to selected item
     mapRef.current?.animateToRegion(
