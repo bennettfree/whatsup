@@ -73,8 +73,7 @@ export async function aiSearch(req: Request, res: Response) {
           }
         );
 
-        // axios response from OpenAI parse call
-        const parsed = JSON.parse(parseResponse.data.choices[0].message.content);
+        const parsed = JSON.parse(response.data.choices[0].message.content);
         parsedIntent = parsed.intent || query;
         venueTypes = parsed.venueTypes || [];
         eventTypes = parsed.eventTypes || [];
