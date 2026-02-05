@@ -158,10 +158,21 @@ export async function executeSearch(intent: SearchIntent, context: UserContext):
 export async function executeSearchWithMeta(
   intent: SearchIntent,
   context: UserContext,
+  opts?: { radiusMiles?: number },
 ): Promise<{ ranked: RankedResults; meta: SearchExecutionMeta }> {
+  const radiusMiles = opts?.radiusMiles ?? 10;
   const nowMs = Date.now();
   const providerPlan = buildProviderPlan(intent);
   const resolved = resolveSearchPlan(intent, providerPlan, context);
+  
+  // Override radius with user's distance filter preference
+  if (resolved.placesParams && radiusMiles) {
+    const radiusMeters = radiusMiles * 1609.34; // miles to meters
+    resolved.placesParams.radiusMeters = radiusMeters;
+  }
+  if (resolved.eventsParams && radiusMiles) {
+    resolved.eventsParams.radiusMiles = radiusMiles;
+  }
 
   // If resolution failed, return empty safely with notes.
   if (!resolved.placesParams && !resolved.eventsParams) {

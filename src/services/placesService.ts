@@ -1,4 +1,4 @@
-import { apiClient, API_BASE_URL } from './apiClient';
+import { apiClient, API_BASE_URL, ENABLE_MOCK_DATA } from './apiClient';
 import { apiCache } from '@/utils/apiCache';
 
 export type Place = {
@@ -91,9 +91,17 @@ export const placesService = {
         const now = Date.now();
         if (__DEV__ && now - lastErrorTime > ERROR_THROTTLE_MS) {
           if (error?.message?.includes('timeout')) {
-            console.warn('[placesService] Backend timeout (API keys may be missing). Using mock data.');
+            console.warn(
+              ENABLE_MOCK_DATA
+                ? '[placesService] Backend timeout (API keys may be missing). Mock fallback is enabled.'
+                : '[placesService] Backend timeout (API keys may be missing).',
+            );
           } else {
-            console.warn('[placesService] Backend unavailable. Using mock data. Run: npm run dev:api');
+            console.warn(
+              ENABLE_MOCK_DATA
+                ? '[placesService] Backend unavailable. Mock fallback is enabled. Run: npm run dev:api'
+                : '[placesService] Backend unavailable. Run: npm run dev:api',
+            );
           }
           lastErrorTime = now;
         }

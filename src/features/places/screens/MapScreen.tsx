@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, TextInput, Dimensions, Activi
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Region, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
@@ -12,7 +13,7 @@ import { mockPlaces, mockEvents, formatHours } from '@/utils/mockData';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { classifyQuery, mapVenueTypeToCategory, mapEventTypeToCategory, type ParsedQuery } from '@/utils/searchHelpers';
 import { searchService, type SearchResult as UnifiedSearchResult } from '@/services/searchService';
-import { API_BASE_URL } from '@/services/apiClient';
+import { API_BASE_URL, ENABLE_MOCK_DATA } from '@/services/apiClient';
 import { useSavedStore } from '@/stores/useSavedStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -305,6 +306,11 @@ const WhatsHappeningSheet = ({
   animationKey,
   isSearchMode,
   resolveImageUrl,
+  hasManuallyDraggedDuringSearchRef,
+  distanceMiles,
+  onDistanceChange,
+  hasMoreResults,
+  totalResults,
 }: {
   region: Region;
   visible: boolean;
@@ -329,13 +335,17 @@ const WhatsHappeningSheet = ({
   animationKey?: number; // Force animation trigger
   isSearchMode?: boolean; // Whether we're in search mode
   resolveImageUrl?: (item: SearchResultItem) => string | undefined;
+  hasManuallyDraggedDuringSearchRef?: React.MutableRefObject<boolean>;
+  distanceMiles?: number;
+  onDistanceChange?: (miles: number) => void;
+  hasMoreResults?: boolean;
+  totalResults?: number;
 }) => {
   const [selectedDate, setSelectedDate] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [currentEventIndex, setCurrentEventIndex] = useState(0);
   const [isDistanceSheetOpen, setIsDistanceSheetOpen] = useState(false);
-  const [distanceMiles, setDistanceMiles] = useState(10);
-  const [distanceDraft, setDistanceDraft] = useState(10);
+  const [distanceDraft, setDistanceDraft] = useState(distanceMiles || 10);
   const distanceTrackWidthRef = useRef(0);
   const distanceThumbStartXRef = useRef(0);
   const DISTANCE_SHEET_HEIGHT = 270;
@@ -343,7 +353,7 @@ const WhatsHappeningSheet = ({
   const distanceSheetTranslateY = useRef(new Animated.Value(DISTANCE_SHEET_HEIGHT)).current;
 
   const openDistanceSheet = () => {
-    setDistanceDraft(distanceMiles);
+    setDistanceDraft(distanceMiles || 10);
     // Ensure initial (hidden) state before showing.
     distanceBackdropOpacity.setValue(0);
     distanceSheetTranslateY.setValue(DISTANCE_SHEET_HEIGHT);
@@ -369,7 +379,7 @@ const WhatsHappeningSheet = ({
   };
 
   const closeDistanceSheet = (opts?: { revertDraft?: boolean }) => {
-    if (opts?.revertDraft) setDistanceDraft(distanceMiles);
+    if (opts?.revertDraft) setDistanceDraft(distanceMiles || 10);
 
     Animated.parallel([
       Animated.timing(distanceBackdropOpacity, {
@@ -389,12 +399,19 @@ const WhatsHappeningSheet = ({
     });
   };
   
-  // Snap points for the bottom sheet
+  // Refined snap points for smooth, natural feeling interactions
   const SNAP_HIDDEN = SCREEN_HEIGHT; // Completely off-screen
-  const SNAP_COLLAPSED = SCREEN_HEIGHT - 80; // Just handle showing
-  const SNAP_PARTIAL = SCREEN_HEIGHT - 220; // Default view
-  const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.25; // 75% expanded
-  const SNAP_EXPANDED = 120; // Fully expanded - aligns with top of map UI
+  const SNAP_COLLAPSED = SCREEN_HEIGHT - 100; // Peek handle + hint of content
+  const SNAP_PARTIAL = SCREEN_HEIGHT - 320; // Comfortable browsing height
+  const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.30; // 70% expanded - optimal for details
+  const SNAP_EXPANDED = 100; // Fully expanded with breathing room
+  
+  // Consistent animation configuration (industry standard: tension 40-50, friction 10-14)
+  const SPRING_CONFIG = {
+    tension: 45,
+    friction: 12,
+    useNativeDriver: true,
+  };
   
   const translateY = useRef(new Animated.Value(SNAP_COLLAPSED)).current;
   const dragOffset = useRef(new Animated.Value(0)).current;
@@ -417,7 +434,7 @@ const WhatsHappeningSheet = ({
     }
   }, [translateY, onSheetPositionChange]);
 
-  // External programmatic snap (used by MapScreen on search blur).
+  // External programmatic snap with haptic feedback.
   // IMPORTANT: Only runs when explicitly triggered via `animationKey` to avoid
   // reintroducing the historical "snap-back" bug during normal drag interactions.
   useEffect(() => {
@@ -445,21 +462,16 @@ const WhatsHappeningSheet = ({
     }
 
     Animated.parallel([
-      Animated.spring(translateY, {
-        toValue,
-        useNativeDriver: true,
-        tension: 40,
-        friction: 12,
-      }),
-      Animated.spring(dragOffset, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 40,
-        friction: 12,
-      }),
-    ]).start(() => {
-      if ((toValue === SNAP_COLLAPSED || toValue === SNAP_HIDDEN) && selectedItem) {
-        onBackFromSearch?.();
+      Animated.spring(translateY, { ...SPRING_CONFIG, toValue }),
+      Animated.spring(dragOffset, { ...SPRING_CONFIG, toValue: 0 }),
+    ]).start(({ finished }) => {
+      if (finished) {
+        // Subtle haptic feedback on snap completion
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        
+        if ((toValue === SNAP_COLLAPSED || toValue === SNAP_HIDDEN) && selectedItem) {
+          onBackFromSearch?.();
+        }
       }
     });
   }, [
@@ -494,8 +506,10 @@ const WhatsHappeningSheet = ({
     // Track dragging state
     if (state === State.BEGAN) {
       isUserDraggingRef.current = true;
-      // Avoid stale "inner scroll active" state locking the sheet.
-      // If the current scroll view is at/near top, onScroll will set this back to false quickly.
+      if (hasManuallyDraggedDuringSearchRef) {
+        hasManuallyDraggedDuringSearchRef.current = true;
+      }
+      // Reset inner scroll lock (will be re-established by onScroll if needed)
       isInnerScrollActiveRef.current = false;
       return;
     }
@@ -509,8 +523,10 @@ const WhatsHappeningSheet = ({
     if (state === State.END) {
       isUserDraggingRef.current = false;
       
+      // If scrolling inside content, don't move sheet
       if (isInnerScrollActiveRef.current) {
         dragOffset.setValue(0);
+        isInnerScrollActiveRef.current = false; // Reset for next gesture
         return;
       }
       
@@ -520,14 +536,14 @@ const WhatsHappeningSheet = ({
       
       let targetSnap = SNAP_PARTIAL;
       
-      // Determine target snap point based on position and velocity
-      if (velocityY > 1200) {
+      // Refined velocity thresholds for more natural feeling
+      if (velocityY > 1000) {
         targetSnap = SNAP_HIDDEN;
-      } else if (velocityY > 800) {
+      } else if (velocityY > 600) {
         targetSnap = SNAP_COLLAPSED;
-      } else if (velocityY < -1200) {
+      } else if (velocityY < -1000) {
         targetSnap = SNAP_EXPANDED;
-      } else if (velocityY < -800) {
+      } else if (velocityY < -600) {
         targetSnap = SNAP_THREE_QUARTER;
       } else {
         // Snap to nearest position
@@ -542,24 +558,25 @@ const WhatsHappeningSheet = ({
         targetSnap = [SNAP_EXPANDED, SNAP_THREE_QUARTER, SNAP_PARTIAL, SNAP_COLLAPSED, SNAP_HIDDEN][minIndex];
       }
       
-      // Animate to target position
+      // Animate to target position with haptic feedback
       Animated.parallel([
         Animated.spring(translateY, {
+          ...SPRING_CONFIG,
           toValue: targetSnap,
-          useNativeDriver: true,
-          tension: 40,
-          friction: 12,
           velocity: velocityY / 1000,
         }),
         Animated.spring(dragOffset, {
+          ...SPRING_CONFIG,
           toValue: 0,
-          useNativeDriver: true,
-          tension: 40,
-          friction: 12,
         }),
-      ]).start(() => {
-        if ((targetSnap === SNAP_COLLAPSED || targetSnap === SNAP_HIDDEN) && selectedItem) {
-          onBackFromSearch?.();
+      ]).start(({ finished }) => {
+        if (finished) {
+          // Haptic feedback on snap
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          
+          if ((targetSnap === SNAP_COLLAPSED || targetSnap === SNAP_HIDDEN) && selectedItem) {
+            onBackFromSearch?.();
+          }
         }
       });
     }
@@ -567,11 +584,10 @@ const WhatsHappeningSheet = ({
     // Handle cancelled/failed gestures
     if (state === State.CANCELLED || state === State.FAILED) {
       isUserDraggingRef.current = false;
+      isInnerScrollActiveRef.current = false; // Reset lock
       Animated.spring(dragOffset, {
+        ...SPRING_CONFIG,
         toValue: 0,
-        useNativeDriver: true,
-        tension: 40,
-        friction: 12,
       }).start();
     }
   };
@@ -949,12 +965,14 @@ const WhatsHappeningSheet = ({
               <TouchableOpacity
                 activeOpacity={0.9}
                 onPress={() => {
-                  setDistanceMiles(distanceDraft);
+                  onDistanceChange?.(distanceDraft);
                   closeDistanceSheet();
+                  // Haptic feedback on distance change
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
                 }}
                 className="flex-1 py-3.5 rounded-2xl bg-gray-900"
               >
-                <Text className="text-center text-base font-semibold text-white">Save</Text>
+                <Text className="text-center text-base font-semibold text-white">Apply Filter</Text>
               </TouchableOpacity>
             </View>
             </Animated.View>
@@ -1039,8 +1057,22 @@ const WhatsHappeningSheet = ({
           scrollEventThrottle={16}
           onScroll={(e) => {
             const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-            // Only allow sheet drag when the detail view is scrolled to the top.
-            isInnerScrollActiveRef.current = y > 2;
+            // Only lock sheet drag when scrolled meaningfully away from top (prevents accidental locks)
+            isInnerScrollActiveRef.current = y > 10;
+          }}
+          onScrollBeginDrag={() => {
+            // User is actively scrolling content - lock sheet gesture
+            const y = (translateY as any).__getValue?.() ?? SNAP_PARTIAL;
+            if (y < SNAP_PARTIAL) {
+              // Only lock if sheet is at least partially expanded
+              isInnerScrollActiveRef.current = true;
+            }
+          }}
+          onScrollEndDrag={() => {
+            // Scroll gesture ended - allow sheet to respond to next gesture
+            setTimeout(() => {
+              isInnerScrollActiveRef.current = false;
+            }, 100);
           }}
         >
           <View className="px-4 pt-4 pb-4">
@@ -1226,7 +1258,7 @@ const WhatsHappeningSheet = ({
 
                 <TouchableOpacity
                   onPress={() => thumbsDown(item.id)}
-                  className="flex-1 py-4 rounded-2xl items-center bg-gray-100 active:bg-gray-200"
+                  className="flex-1 py-4 rounded-2xl items-center justify-center bg-gray-100 active:bg-gray-200"
                   style={{
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 2 },
@@ -1235,7 +1267,7 @@ const WhatsHappeningSheet = ({
                     elevation: 2,
                   }}
                 >
-                  <Feather name="thumbs-down" size={22} color={myVote === 'down' ? iconColors.active : iconColors.default} />
+                  <Feather name="thumbs-down" size={24} color={myVote === 'down' ? iconColors.active : iconColors.default} />
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1303,13 +1335,24 @@ const WhatsHappeningSheet = ({
         scrollEventThrottle={16}
         onScroll={(e) => {
           const y = e?.nativeEvent?.contentOffset?.y ?? 0;
-          isInnerScrollActiveRef.current = y > 2;
+          isInnerScrollActiveRef.current = y > 10;
 
           // Only show "load more" after the user truly reached the bottom.
           const layoutH = e?.nativeEvent?.layoutMeasurement?.height ?? 0;
           const contentH = e?.nativeEvent?.contentSize?.height ?? 0;
           const reachedBottom = layoutH + y >= contentH - 24;
           onSearchReachedBottomChange?.(Boolean(reachedBottom));
+        }}
+        onScrollBeginDrag={() => {
+          const y = (translateY as any).__getValue?.() ?? SNAP_PARTIAL;
+          if (y < SNAP_PARTIAL) {
+            isInnerScrollActiveRef.current = true;
+          }
+        }}
+        onScrollEndDrag={() => {
+          setTimeout(() => {
+            isInnerScrollActiveRef.current = false;
+          }, 100);
         }}
       >
         {shown.length > 0 ? (
@@ -1419,9 +1462,13 @@ const WhatsHappeningSheet = ({
               <View className="pb-10 pt-2 items-center">
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  disabled={Boolean(isLoadingMoreSearchResults)}
+                  disabled={Boolean(isLoadingMoreSearchResults) || (!canShowMore && !(hasMoreResults || false))}
                   onPress={() => onLoadMoreSearchResults?.()}
-                  className="bg-white border border-gray-200 px-5 py-3 rounded-2xl flex-row items-center"
+                  className={`border px-5 py-3 rounded-2xl flex-row items-center ${
+                    !canShowMore && !(hasMoreResults || false) 
+                      ? 'bg-gray-50 border-gray-100' 
+                      : 'bg-white border-gray-200'
+                  }`}
                   style={{
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 6 },
@@ -1433,14 +1480,22 @@ const WhatsHappeningSheet = ({
                   {isLoadingMoreSearchResults ? (
                     <ActivityIndicator size="small" color={iconColors.active} />
                   ) : (
-                    <Icon name="refresh-cw" size={18} color={iconColors.active} />
+                    <Icon 
+                      name={!canShowMore && !(hasMoreResults || false) ? 'check' : 'chevron-down'} 
+                      size={18} 
+                      color={!canShowMore && !(hasMoreResults || false) ? iconColors.muted : iconColors.active} 
+                    />
                   )}
-                  <Text className="text-sm font-semibold text-gray-900 ml-2">
+                  <Text className={`text-sm font-semibold ml-2 ${
+                    !canShowMore && !(hasMoreResults || false) ? 'text-gray-500' : 'text-gray-900'
+                  }`}>
                     {isLoadingMoreSearchResults
-                      ? 'Searching more…'
+                      ? 'Loading more…'
                       : canShowMore
-                        ? 'Show more results'
-                        : 'Refresh for more results'}
+                        ? `Show more (${all.length - shown.length} ready)`
+                        : (hasMoreResults || false)
+                          ? `Load more (${(totalResults || 0) - all.length}+ available)`
+                          : 'No more results'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1607,7 +1662,9 @@ export const MapScreen = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [backendReachable, setBackendReachable] = useState(false);
-  const [resultsSource, setResultsSource] = useState<'backend' | 'mock'>('mock');
+  const [resultsSource, setResultsSource] = useState<'backend' | 'mock' | 'unavailable'>(
+    ENABLE_MOCK_DATA ? 'mock' : 'unavailable'
+  );
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [activePlaceId, setActivePlaceId] = useState<string | null>(null);
@@ -1629,6 +1686,7 @@ export const MapScreen = () => {
   const keyboardHeightRef = useRef(0);
   const sheetYRef = useRef<number>(SCREEN_HEIGHT);
   const didSubmitSearchDuringFocusRef = useRef(false);
+  const hasManuallyDraggedDuringSearchRef = useRef(false);
   const sheetTargetBeforeSearchRef = useRef<'collapsed' | 'partial' | 'three-quarter' | 'expanded'>('partial');
   const lastSheetViewBeforeDetailRef = useRef<'whats' | 'results'>('whats');
   const SEARCH_PAGE_SIZE = 20;
@@ -1636,7 +1694,17 @@ export const MapScreen = () => {
   const [searchHasReachedBottom, setSearchHasReachedBottom] = useState(false);
   const [isLoadingMoreSearchResults, setIsLoadingMoreSearchResults] = useState(false);
   const runSearchSeqRef = useRef(0);
+  const backendOfflineAlertedRef = useRef(false);
   const [isSheetHidden, setIsSheetHidden] = useState(false);
+  
+  // Pagination state for infinite scroll
+  const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [totalResults, setTotalResults] = useState(0);
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const currentSearchQueryRef = useRef('');
+  
+  // Distance filter state (lifted from WhatsHappeningSheet for API integration)
+  const [distanceMiles, setDistanceMiles] = useState(10);
 
   // Treat programmatic snaps as one-shot commands.
   // This prevents later re-renders / data refreshes from accidentally reusing a stale target position.
@@ -1647,6 +1715,43 @@ export const MapScreen = () => {
     }, 350);
     return () => clearTimeout(t);
   }, [sheetAnimationKey, sheetTargetPosition]);
+
+  // Keyboard avoidance for search bar - smooth animation matching iOS/Android behavior
+  useEffect(() => {
+    const showListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        keyboardHeightRef.current = e.endCoordinates.height;
+        const duration = Platform.OS === 'ios' ? e.duration || 250 : 250;
+        
+        Animated.timing(keyboardShiftY, {
+          toValue: -e.endCoordinates.height + 50, // Shift search bar up to stay visible
+          duration,
+          easing: Platform.OS === 'ios' ? Easing.bezier(0.17, 0.59, 0.4, 0.77) : Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+
+    const hideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (e) => {
+        const duration = Platform.OS === 'ios' ? e.duration || 250 : 250;
+        
+        Animated.timing(keyboardShiftY, {
+          toValue: 0,
+          duration,
+          easing: Platform.OS === 'ios' ? Easing.bezier(0.17, 0.59, 0.4, 0.77) : Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, [keyboardShiftY]);
 
   // Best-effort place photoName enrichment (when backend results fall back to legacy icons).
   // Requires a public key at build time. If missing, we gracefully do nothing.
@@ -1765,6 +1870,17 @@ export const MapScreen = () => {
   const SNAP_PARTIAL = SCREEN_HEIGHT - 220;
   const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.25;
   const SNAP_EXPANDED = 120;
+  
+  // Map dimming for visual hierarchy when sheet is expanded
+  const mapDimOpacity = useMemo(() => {
+    if (!sheetTranslateY) return new Animated.Value(0);
+    
+    return sheetTranslateY.interpolate({
+      inputRange: [SNAP_EXPANDED, SNAP_PARTIAL, SNAP_COLLAPSED],
+      outputRange: [0.25, 0, 0],
+      extrapolate: 'clamp',
+    });
+  }, [sheetTranslateY, SNAP_EXPANDED, SNAP_PARTIAL, SNAP_COLLAPSED]);
   
   // Calculate Find Me button translateY based on sheet position
   // Button has fixed bottom position and uses translateY to follow sheet
@@ -1975,10 +2091,24 @@ export const MapScreen = () => {
     return combined;
   };
 
-  const runSearch = async (q: string, centerLat: number, centerLng: number) => {
+  const runSearch = async (
+    q: string,
+    centerLat: number,
+    centerLng: number,
+    opts?: { append?: boolean; radiusMiles?: number }
+  ) => {
     const seq = ++runSearchSeqRef.current;
     const tz = Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone || 'UTC';
     const nowISO = new Date().toISOString();
+    const isAppending = opts?.append || false;
+    const radius = opts?.radiusMiles ?? distanceMiles;
+    const offset = isAppending ? currentOffset + SEARCH_PAGE_SIZE : 0;
+
+    // Track current query for pagination
+    if (!isAppending) {
+      currentSearchQueryRef.current = q;
+      setCurrentOffset(0);
+    }
 
     try {
       const reachable = backendReachable ? true : await searchService.isBackendReachable();
@@ -1986,8 +2116,27 @@ export const MapScreen = () => {
 
       if (!reachable) {
         setBackendReachable(false);
-        setResultsSource('mock');
-        setResults(buildMockResults(q, centerLat, centerLng));
+        if (ENABLE_MOCK_DATA) {
+          setResultsSource('mock');
+          if (!isAppending) {
+            setResults(buildMockResults(q, centerLat, centerLng));
+          }
+        } else {
+          setResultsSource('unavailable');
+          if (!isAppending) {
+            setResults([]);
+          }
+          if (!backendOfflineAlertedRef.current) {
+            backendOfflineAlertedRef.current = true;
+            Alert.alert(
+              'Backend offline',
+              API_BASE_URL
+                ? `Can’t reach your API at:\n\n${API_BASE_URL}\n\nUpdate EXPO_PUBLIC_API_URL to a reachable (hosted) backend, or connect your device to the same network as your dev machine and allow port 4000 through the firewall.`
+                : 'EXPO_PUBLIC_API_URL is not set. Configure it to point at your hosted backend to use live data.',
+              [{ text: 'OK' }],
+            );
+          }
+        }
         return;
       }
 
@@ -1998,25 +2147,94 @@ export const MapScreen = () => {
           timezone: tz,
           nowISO,
         },
+        radiusMiles: radius,
+        limit: SEARCH_PAGE_SIZE,
+        offset,
       });
       if (seq !== runSearchSeqRef.current) return;
 
       if (!response) {
         setBackendReachable(false);
-        setResultsSource('mock');
-        setResults(buildMockResults(q, centerLat, centerLng));
+        if (ENABLE_MOCK_DATA) {
+          setResultsSource('mock');
+          if (!isAppending) {
+            setResults(buildMockResults(q, centerLat, centerLng));
+          }
+        } else {
+          setResultsSource('unavailable');
+          if (!isAppending) {
+            setResults([]);
+          }
+          if (!backendOfflineAlertedRef.current) {
+            backendOfflineAlertedRef.current = true;
+            Alert.alert(
+              'Backend offline',
+              API_BASE_URL
+                ? `Can’t reach your API at:\n\n${API_BASE_URL}\n\nUpdate EXPO_PUBLIC_API_URL to a reachable (hosted) backend, or connect your device to the same network as your dev machine and allow port 4000 through the firewall.`
+                : 'EXPO_PUBLIC_API_URL is not set. Configure it to point at your hosted backend to use live data.',
+              [{ text: 'OK' }],
+            );
+          }
+        }
         return;
       }
 
       setBackendReachable(true);
       setResultsSource('backend');
-      setResults(response.results || []);
+      const newResults = response.results || [];
+      
+      // Update pagination state
+      setTotalResults(response.pagination?.total || newResults.length);
+      setHasMoreResults(response.pagination?.hasMore || false);
+      setCurrentOffset(response.pagination?.offset || offset);
+      
+      // Append or replace results based on mode
+      if (isAppending) {
+        setResults((prev) => {
+          // Deduplicate by ID
+          const seen = new Set(prev.map((r) => r.id));
+          const unique = newResults.filter((r) => !seen.has(r.id));
+          return [...prev, ...unique];
+        });
+      } else {
+        setResults(newResults);
+        
+        // Smart sheet positioning based on results (only when in search mode and not manually positioned)
+        if (isSearchMode && q && !isSearchInputFocused) {
+          if (newResults.length === 0) {
+            setSheetTargetPosition('partial');
+            setSheetAnimationKey((k) => k + 1);
+          } else if (newResults.length > 0 && newResults.length <= 3) {
+            setSheetTargetPosition('partial');
+            setSheetAnimationKey((k) => k + 1);
+          }
+        }
+      }
     } catch {
       if (seq !== runSearchSeqRef.current) return;
-      // Never crash the UI on search failures; fall back safely.
+      // Never crash the UI on search failures.
       setBackendReachable(false);
-      setResultsSource('mock');
-      setResults(buildMockResults(q, centerLat, centerLng));
+      if (ENABLE_MOCK_DATA) {
+        setResultsSource('mock');
+        if (!isAppending) {
+          setResults(buildMockResults(q, centerLat, centerLng));
+        }
+      } else {
+        setResultsSource('unavailable');
+        if (!isAppending) {
+          setResults([]);
+        }
+        if (!backendOfflineAlertedRef.current) {
+          backendOfflineAlertedRef.current = true;
+          Alert.alert(
+            'Backend offline',
+            API_BASE_URL
+              ? `Can’t reach your API at:\n\n${API_BASE_URL}\n\nUpdate EXPO_PUBLIC_API_URL to a reachable (hosted) backend, or connect your device to the same network as your dev machine and allow port 4000 through the firewall.`
+              : 'EXPO_PUBLIC_API_URL is not set. Configure it to point at your hosted backend to use live data.',
+            [{ text: 'OK' }],
+          );
+        }
+      }
     }
   };
 
@@ -2069,6 +2287,16 @@ export const MapScreen = () => {
     }
   };
 
+  const handleDistanceChange = (miles: number) => {
+    setDistanceMiles(miles);
+    
+    // Trigger new search with updated radius (maintains current query and location)
+    const q = currentSearchQueryRef.current || searchQuery.trim();
+    if (q || isSearchMode) {
+      void runSearch(q, region.latitude, region.longitude, { radiusMiles: miles });
+    }
+  };
+
   const handleBackFromSearch = () => {
     setIsSearchMode(false);
     setSearchQuery('');
@@ -2080,6 +2308,8 @@ export const MapScreen = () => {
     setActiveEventId(null);
     setSelectedItemForDetail(null);
     setResults([]); // Clear results to show What's Happening view
+    setCurrentOffset(0);
+    setHasMoreResults(false);
   };
 
   const exitSearchToWhatsHappening = () => {
@@ -2101,53 +2331,35 @@ export const MapScreen = () => {
 
   const loadMoreSearchResults = async () => {
     if (isLoadingMoreSearchResults) return;
+    
     setIsLoadingMoreSearchResults(true);
     try {
+      // First, reveal any already-fetched results
       const total = results.length;
       if (searchDisplayCount < total) {
         setSearchDisplayCount((c) => Math.min(c + SEARCH_PAGE_SIZE, total));
         return;
       }
 
-      const q = searchQuery.trim();
+      // If no more results available from backend, stop
+      if (!hasMoreResults) {
+        setSearchHasReachedBottom(true);
+        return;
+      }
+
+      const q = currentSearchQueryRef.current || searchQuery.trim();
       if (!q) return;
 
-      // Best-effort: refresh the backend search and merge in any new unique results.
-      const reachable = backendReachable ? true : await searchService.isBackendReachable();
-      if (!reachable) return;
-
-      const tz = Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone || 'UTC';
-      const nowISO = new Date().toISOString();
-      const response = await searchService.search({
-        query: q,
-        userContext: {
-          currentLocation: { latitude: region.latitude, longitude: region.longitude },
-          timezone: tz,
-          nowISO,
-        },
-      });
-
-      const incoming = response?.results ?? [];
-      if (incoming.length === 0) return;
-
-      setResults((prev) => {
-        const seen = new Set(prev.map((r) => `${r.type}-${r.id}`));
-        const merged = [...prev];
-        for (const r of incoming) {
-          const key = `${r.type}-${r.id}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            merged.push(r);
-          }
-        }
-        return merged;
-      });
-
-      // Reveal any newly merged items.
-      setSearchDisplayCount((c) => Math.min(c + SEARCH_PAGE_SIZE, results.length + incoming.length));
+      // Fetch next page with append mode
+      await runSearch(q, region.latitude, region.longitude, { append: true });
+      
+      // Expand display count to show newly appended results
+      setSearchDisplayCount((c) => c + SEARCH_PAGE_SIZE);
+      
+      // Haptic feedback on successful load
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } finally {
       setIsLoadingMoreSearchResults(false);
-      setSearchHasReachedBottom(false);
     }
   };
 
@@ -2180,8 +2392,9 @@ export const MapScreen = () => {
 
   const handleSearchFocus = () => {
     // When focusing the search input:
-    // - remember the current sheet position (so we can restore it on blur)
-    // - collapse the sheet fully behind the keyboard for a clean search experience
+    // - Save current sheet position for restoration
+    // - Smoothly collapse sheet to peek state (not hidden - keeps context visible)
+    // - Reset manual drag tracking
     const currentY = sheetYRef.current;
     const distances = [
       { key: 'expanded' as const, d: Math.abs(currentY - SNAP_EXPANDED) },
@@ -2191,29 +2404,39 @@ export const MapScreen = () => {
       { key: 'hidden' as const, d: Math.abs(currentY - SNAP_HIDDEN) },
     ];
     const nearest = distances.sort((a, b) => a.d - b.d)[0]?.key ?? 'partial';
-    sheetTargetBeforeSearchRef.current = nearest === 'hidden' ? 'partial' : nearest;
+    sheetTargetBeforeSearchRef.current = nearest === 'hidden' ? 'collapsed' : nearest;
 
     setIsSearchInputFocused(true);
     didSubmitSearchDuringFocusRef.current = false;
+    hasManuallyDraggedDuringSearchRef.current = false; // Reset drag tracking
     setIsSheetVisible(true);
 
-    setSheetTargetPosition('hidden');
+    // Collapse to peek state (not hidden) - keeps user oriented with content below
+    setSheetTargetPosition('collapsed');
     setSheetAnimationKey((k) => k + 1);
   };
 
   const handleSearchBlur = () => {
     // When leaving the search input:
-    // - If user did NOT submit a search, restore the sheet to its prior position.
-    // - If user DID submit a search, expand to second-highest position for results.
+    // - If user submitted a search, expand to comfortable viewing height
+    // - If user manually dragged sheet during focus, keep current position (respect user intent)
+    // - Otherwise, restore to pre-focus position
     setIsSearchInputFocused(false);
     setIsSheetVisible(true);
 
     if (didSubmitSearchDuringFocusRef.current) {
+      // Search submitted - expand to comfortable results viewing height
       setSheetTargetPosition('three-quarter');
       setSheetAnimationKey((k) => k + 1);
       return;
     }
 
+    // If user manually adjusted sheet position while searching, keep it there
+    if (hasManuallyDraggedDuringSearchRef.current) {
+      return; // Respect user's manual positioning
+    }
+
+    // No search, no manual adjustments - restore to pre-focus position
     setShouldExpandSheet(false);
     setSheetTargetPosition(sheetTargetBeforeSearchRef.current);
     setSheetAnimationKey((k) => k + 1);
@@ -2225,7 +2448,8 @@ export const MapScreen = () => {
   };
 
   const handleMarkerPress = (item: SearchResultItem) => {
-    ensureSheetRevealed({ target: 'partial' });
+    // Expand to three-quarter for optimal balance: details visible, map still usable
+    ensureSheetRevealed({ target: 'three-quarter' });
     lastSheetViewBeforeDetailRef.current = isSearchMode ? 'results' : 'whats';
     if (item.type === 'place') {
       setActivePlaceId(item.id);
@@ -2236,7 +2460,11 @@ export const MapScreen = () => {
     }
     setSelectedItemForDetail({ type: item.type, data: item });
     setIsSheetVisible(true);
-    // Sheet will auto-expand via useEffect when selectedItem is set
+    setSheetTargetPosition('three-quarter');
+    setSheetAnimationKey((k) => k + 1);
+    
+    // Subtle haptic feedback on marker selection
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
   const handleSearchResultPress = (item: SearchResultItem) => {
@@ -2681,6 +2909,20 @@ export const MapScreen = () => {
           ))}
         </MapView>
 
+        {/* Subtle map dimming when sheet is expanded - creates visual hierarchy */}
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: '#000',
+            opacity: mapDimOpacity,
+          }}
+        />
+
         {/* UI overlay stays in safe-area, map renders behind status bar */}
         <SafeAreaView
           pointerEvents="box-none"
@@ -2757,13 +2999,21 @@ export const MapScreen = () => {
           {/* Data Source Indicator */}
           <View className="absolute left-4" style={{ top: insets.top + 12 }}>
             <View className={`px-3 py-1.5 rounded-full flex-row items-center shadow-lg ${
-              resultsSource === 'backend' ? 'bg-green-500' : 'bg-orange-500'
+              resultsSource === 'backend'
+                ? 'bg-green-500'
+                : resultsSource === 'mock'
+                  ? 'bg-orange-500'
+                  : 'bg-red-500'
             }`}>
               <View className={`w-2 h-2 rounded-full mr-2 ${
-                resultsSource === 'backend' ? 'bg-white' : 'bg-white'
+                'bg-white'
               }`} />
               <Text className="text-xs font-bold text-white">
-                {resultsSource === 'backend' ? 'LIVE DATA' : 'MOCK DATA'}
+                {resultsSource === 'backend'
+                  ? 'LIVE DATA'
+                  : resultsSource === 'mock'
+                    ? 'MOCK DATA'
+                    : 'BACKEND OFFLINE'}
               </Text>
             </View>
           </View>
@@ -2775,7 +3025,7 @@ export const MapScreen = () => {
                 <Pressable
                   onPress={() => {
                     setIsSheetVisible(true);
-                    setSheetTargetPosition('partial');
+                    setSheetTargetPosition('collapsed');
                     setSheetAnimationKey((k) => k + 1);
                   }}
                   hitSlop={12}
@@ -2824,6 +3074,11 @@ export const MapScreen = () => {
         animationKey={sheetAnimationKey}
         isSearchMode={isSearchMode}
         resolveImageUrl={resolveResultImageUrl}
+        hasManuallyDraggedDuringSearchRef={hasManuallyDraggedDuringSearchRef}
+        distanceMiles={distanceMiles}
+        onDistanceChange={handleDistanceChange}
+        hasMoreResults={hasMoreResults}
+        totalResults={totalResults}
       />
     </View>
   );

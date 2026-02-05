@@ -36,6 +36,9 @@ export type SearchRequest = {
     timezone: string;
     nowISO: string;
   };
+  radiusMiles?: number; // Search radius in miles (default: 10)
+  limit?: number; // Max results per page (default: 20)
+  offset?: number; // Pagination offset (default: 0)
 };
 
 export type SearchResponse = {
@@ -46,12 +49,20 @@ export type SearchResponse = {
     usedAI: boolean;
     cacheHit: boolean;
   };
+  pagination: {
+    total: number; // Total results available
+    offset: number; // Current offset
+    limit: number; // Results per page
+    hasMore: boolean; // Whether more results are available
+  };
 };
 
 let backendUnavailable = false;
 let lastBackendCheckMs = 0;
 const BACKEND_RETRY_MS = 5000;
 const BACKEND_OK_TTL_MS = 15000;
+const HEALTH_TIMEOUT_MS = 20000;
+const SEARCH_TIMEOUT_MS = 25000;
 
 function nowMs(): number {
   return Date.now();
@@ -60,11 +71,12 @@ function nowMs(): number {
 export const searchService = {
   /**
    * Best-effort health check to determine whether the backend is reachable.
-   * When unreachable, callers must switch to mock paths (mutually exclusive).
+   * When unreachable, callers can decide whether to show an error state or (only if explicitly
+   * enabled) fall back to mock data.
    */
   async isBackendReachable(): Promise<boolean> {
     if (!API_BASE_URL) {
-      console.log('🔴 No API_BASE_URL configured - using mock data');
+      console.log('🔴 No API_BASE_URL configured');
       return false;
     }
     const now = nowMs();
@@ -83,7 +95,7 @@ export const searchService = {
     lastBackendCheckMs = now;
     try {
       console.log('🔍 Checking backend health at:', API_BASE_URL);
-      await apiClient.get('/api/health');
+      await apiClient.get('/api/health', { timeout: HEALTH_TIMEOUT_MS });
       backendUnavailable = false;
       console.log('✅ Backend is reachable!');
       return true;
@@ -110,7 +122,9 @@ export const searchService = {
 
     try {
       console.log('🔍 Searching backend:', request.query);
-      const response = await apiClient.post<SearchResponse>('/api/search', request);
+      const response = await apiClient.post<SearchResponse>('/api/search', request, {
+        timeout: SEARCH_TIMEOUT_MS,
+      });
       backendUnavailable = false;
       console.log('✅ Backend search successful:', response.results.length, 'results');
       return response;

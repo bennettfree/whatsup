@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,11 @@ import {
   TextInput,
   FlatList,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { Icon, iconColors } from '@/components/Icon';
 
 type MessageParticipant = {
@@ -162,10 +165,11 @@ export const HomeScreen = () => {
     [selectedId],
   );
 
-  const handleOpenConversation = (conversation: Conversation) => {
+  const handleOpenConversation = useCallback((conversation: Conversation) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setSelectedId(conversation.id);
     setViewMode('chat');
-  };
+  }, []);
 
   const handleBack = () => {
     if (viewMode === 'chat' || viewMode === 'details') {
@@ -253,7 +257,7 @@ export const HomeScreen = () => {
     );
   };
 
-  const renderInboxRow = ({ item }: { item: Conversation }) => {
+  const renderInboxRow = useCallback(({ item }: { item: Conversation }) => {
     const initials = getInitials(item.name);
 
     return (
@@ -309,9 +313,9 @@ export const HomeScreen = () => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [handleOpenConversation]);
 
-  const renderMessageBubble = (message: Message, isFirstForSender: boolean) => {
+  const renderMessageBubble = useCallback((message: Message, isFirstForSender: boolean) => {
     if (!selectedConversation) return null;
 
     const isMe = selectedConversation.members.find((m) => m.id === message.senderId)?.isMe;
@@ -335,9 +339,9 @@ export const HomeScreen = () => {
         )}
       </View>
     );
-  };
+  }, [selectedConversation]);
 
-  const renderMessages = () => {
+  const renderMessages = useCallback(() => {
     if (!selectedConversation) return null;
 
     if (!selectedConversation.messages.length) {
@@ -355,6 +359,7 @@ export const HomeScreen = () => {
         className="flex-1 bg-gray-50"
         contentContainerStyle={{ paddingVertical: 12 }}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -369,10 +374,10 @@ export const HomeScreen = () => {
           const prev = all[index - 1];
           const isFirstForSender = !prev || prev.senderId !== message.senderId;
           return renderMessageBubble(message, isFirstForSender);
-        })}
+        }        )}
       </ScrollView>
     );
-  };
+  }, [selectedConversation, refreshing, onRefresh, renderMessageBubble]);
 
   const renderTypingIndicator = () => {
     if (viewMode !== 'chat' || !selectedConversation) return null;
@@ -430,6 +435,7 @@ export const HomeScreen = () => {
           className="flex-1"
           contentContainerStyle={{ paddingVertical: 16 }}
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -516,6 +522,15 @@ export const HomeScreen = () => {
                 progressBackgroundColor="#ffffff"
               />
             }
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={7}
+            initialNumToRender={15}
+            getItemLayout={(data, index) => ({
+              length: 76, // approximate row height
+              offset: 76 * index,
+              index,
+            })}
           />
         </View>
       );
@@ -523,12 +538,18 @@ export const HomeScreen = () => {
 
     if (viewMode === 'chat') {
       return (
-        <View className="flex-1 bg-gray-50">
-          {renderPlanBar()}
-          {renderMessages()}
-          {renderTypingIndicator()}
-          {renderInputBar()}
-        </View>
+        <KeyboardAvoidingView 
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={90}
+        >
+          <View className="flex-1 bg-gray-50">
+            {renderPlanBar()}
+            {renderMessages()}
+            {renderTypingIndicator()}
+            {renderInputBar()}
+          </View>
+        </KeyboardAvoidingView>
       );
     }
 

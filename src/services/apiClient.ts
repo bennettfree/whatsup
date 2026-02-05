@@ -6,12 +6,22 @@ import type { ApiError } from '@/types';
 // When undefined, API calls should gracefully no-op at the service layer.
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
+/**
+ * Mock data is **opt-in only**.
+ *
+ * - When true, UI layers may choose to fall back to local mock data if the backend is unreachable.
+ * - When false/undefined, the app should surface backend connectivity issues instead of silently
+ *   showing mock content (helps avoid shipping/demoing fake data by accident).
+ */
+export const ENABLE_MOCK_DATA = process.env.EXPO_PUBLIC_ENABLE_MOCK_DATA === 'true';
+
 // Log the API URL on startup for debugging
 if (__DEV__) {
   console.log('📡 API Configuration:');
   console.log('  EXPO_PUBLIC_API_URL:', API_BASE_URL || '❌ NOT SET');
+  console.log('  EXPO_PUBLIC_ENABLE_MOCK_DATA:', ENABLE_MOCK_DATA ? 'true' : 'false');
   if (!API_BASE_URL) {
-    console.warn('⚠️  Backend API URL not configured! App will use mock data only.');
+    console.warn('⚠️  Backend API URL not configured! Network-backed features will be unavailable.');
     console.warn('⚠️  Set EXPO_PUBLIC_API_URL in your .env file');
   }
 }

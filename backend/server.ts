@@ -6,6 +6,7 @@ import { getPlaces } from './api/places';
 import { aiSearch } from './api/ai-search';
 import { searchHandler } from './api/search';
 import { getPlacePhoto } from './api/place-photo';
+import os from 'os';
 
 const app = express();
 
@@ -76,7 +77,10 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
+// Bind to all interfaces so other devices on the LAN can reach the API.
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.listen(Number(PORT), HOST, () => {
   console.log(`\n🚀 API server listening on port ${PORT}`);
   console.log(`📍 Google Places API: ${process.env.GOOGLE_PLACES_API_KEY ? 'Configured ✓' : '❌ Missing'}`);
   console.log(`🎫 Ticketmaster API: ${process.env.TICKETMASTER_API_KEY ? 'Configured ✓' : '❌ Missing'}`);
@@ -85,7 +89,24 @@ app.listen(PORT, () => {
   console.log(`   GET  http://localhost:${PORT}/api/health`);
   console.log(`   GET  http://localhost:${PORT}/api/places`);
   console.log(`   GET  http://localhost:${PORT}/api/events`);
-  console.log(`   POST http://localhost:${PORT}/api/ai-search\n`);
+  console.log(`   POST http://localhost:${PORT}/api/ai-search`);
+
+  // Helpful for phone testing: print LAN IPs.
+  try {
+    const ifaces = os.networkInterfaces();
+    const ips: string[] = [];
+    for (const name of Object.keys(ifaces)) {
+      for (const addr of ifaces[name] ?? []) {
+        if (addr.family === 'IPv4' && !addr.internal) ips.push(addr.address);
+      }
+    }
+    if (ips.length) {
+      console.log(`\n📱 Try from your phone (same Wi‑Fi):`);
+      for (const ip of ips) console.log(`   GET  http://${ip}:${PORT}/api/health`);
+    }
+  } catch {}
+
+  console.log('');
 });
 
 

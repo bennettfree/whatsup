@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { View, ScrollView, Text, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, ScrollView, FlatList, Text, TouchableOpacity, RefreshControl, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { Icon, iconColors } from '@/components/Icon';
 import { ProfileHeader } from '../components/ProfileHeader';
 import { mockUser, formatNumber } from '@/utils/mockData';
 import { Image } from 'expo-image';
 import type { MainTabScreenProps } from '@/navigation/types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const MOMENT_SIZE = SCREEN_WIDTH / 3;
 
 type Moment = {
   id: string;
@@ -90,25 +94,27 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
     console.log('Settings');
   };
 
-  const handleOpenMoment = (moment: Moment) => {
+  const handleOpenMoment = useCallback((moment: Moment) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     navigation.navigate('MomentDetail', { momentId: moment.id });
-  };
+  }, [navigation]);
 
-  const renderMomentCard = (moment: Moment) => {
+  const renderMomentCard = useCallback(({ item: moment }: { item: Moment }) => {
     const isCarousel = moment.mediaUris && moment.mediaUris.length > 1;
     
     return (
       <TouchableOpacity
-        key={moment.id}
         activeOpacity={0.9}
-        className="w-1/3"
+        style={{ width: MOMENT_SIZE }}
         onPress={() => handleOpenMoment(moment)}
       >
         <View className="bg-gray-200 overflow-hidden relative">
           <Image
             source={{ uri: moment.mediaUri }}
-            style={{ width: '100%', aspectRatio: 1 }}
+            style={{ width: MOMENT_SIZE, height: MOMENT_SIZE }}
             contentFit="cover"
+            priority="high"
+            transition={150}
           />
           {/* Carousel indicator - stacked layers effect */}
           {isCarousel && (
@@ -155,7 +161,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </TouchableOpacity>
     );
-  };
+  }, [handleOpenMoment]);
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
@@ -174,6 +180,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         className="flex-1 bg-gray-50"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 24 }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -292,9 +299,18 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
               </Text>
             </View>
           ) : (
-            <View className="flex-row flex-wrap">
-              {mockMoments.map(renderMomentCard)}
-            </View>
+            <FlatList
+              data={mockMoments}
+              keyExtractor={(item) => item.id}
+              numColumns={3}
+              renderItem={renderMomentCard}
+              scrollEnabled={false}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={9}
+              windowSize={3}
+              initialNumToRender={12}
+            />
           )}
         </View>
       </ScrollView>

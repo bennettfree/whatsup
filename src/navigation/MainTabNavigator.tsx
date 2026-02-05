@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from './types';
+import * as Haptics from 'expo-haptics';
 import { Icon, iconColors, type IconName } from '@/components/Icon';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useProfileStore } from '@/stores';
@@ -104,11 +105,20 @@ export const MainTabNavigator = () => {
   return (
     <Tab.Navigator
       initialRouteName="Home"
+      screenListeners={{
+        tabPress: () => {
+          // Haptic feedback on tab press for tactile response
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        },
+      }}
       screenOptions={({ route }) => ({
         headerShown: false,
         
         // Smooth slide transitions between screens
         animation: 'shift',
+        
+        // Lazy loading for better initial load performance
+        lazy: true,
         
         tabBarIcon: ({ focused }) => {
           // Show profile photo for Profile tab, animated icons for others

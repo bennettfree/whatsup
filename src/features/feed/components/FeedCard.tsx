@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Dimensions } from 'react-native';
+import React, { useState, memo } from 'react';
+import { View, Text, TouchableOpacity, Dimensions, Animated } from 'react-native';
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { Icon, iconColors } from '@/components/Icon';
 import type { Place } from '@/types';
 import { formatNumber } from '@/utils/mockData';
@@ -16,7 +17,7 @@ interface FeedCardProps {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-export const FeedCard = ({
+const FeedCardComponent = ({
   place,
   onPress,
   onLike,
@@ -30,11 +31,13 @@ export const FeedCard = ({
   const handleLike = () => {
     setIsLiked(!isLiked);
     onLike?.();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
   const handleSave = () => {
     setIsSaved(!isSaved);
     onSave?.();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   };
 
   return (
@@ -62,12 +65,20 @@ export const FeedCard = ({
       </TouchableOpacity>
 
       {/* Image */}
-      <TouchableOpacity onPress={onPress} activeOpacity={0.95}>
+      <TouchableOpacity 
+        onPress={() => {
+          onPress?.();
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }} 
+        activeOpacity={0.95}
+      >
         <Image
           source={{ uri: place.imageUrls[0] }}
           style={{ width: SCREEN_WIDTH, height: SCREEN_WIDTH }}
           contentFit="cover"
+          priority="high"
           transition={200}
+          recyclingKey={place.id}
         />
       </TouchableOpacity>
 
@@ -135,3 +146,11 @@ export const FeedCard = ({
     </View>
   );
 };
+
+// Memoized export to prevent unnecessary re-renders
+export const FeedCard = memo(FeedCardComponent, (prev, next) => {
+  return (
+    prev.place.id === next.place.id &&
+    prev.place.isSaved === next.place.isSaved
+  );
+});

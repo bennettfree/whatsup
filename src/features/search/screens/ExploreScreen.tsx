@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Pressable, Dimensions, Animated, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 
@@ -62,7 +63,7 @@ export const ExploreScreen = () => {
       const targetFeed = targetIndex === 0 ? 'explore' : 'friends';
       setActiveFeed(targetFeed);
       
-      // Animate to final position
+      // Animate to final position with haptic feedback
       Animated.parallel([
         Animated.spring(translateX, {
           toValue: -targetIndex * SCREEN_WIDTH,
@@ -77,7 +78,11 @@ export const ExploreScreen = () => {
           tension: 65,
           friction: 10,
         }),
-      ]).start();
+      ]).start(({ finished }) => {
+        if (finished) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        }
+      });
     } else if (nativeEvent.state === State.BEGAN) {
       // Reset drag offset when starting new gesture
       dragOffset.setValue(0);
@@ -88,6 +93,9 @@ export const ExploreScreen = () => {
     const targetIndex = feed === 'explore' ? 0 : 1;
     currentIndex.current = targetIndex;
     setActiveFeed(feed);
+    
+    // Haptic feedback on tab switch
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     
     Animated.parallel([
       Animated.spring(translateX, {
@@ -217,6 +225,7 @@ export const ExploreScreen = () => {
               <ScrollView 
                 className="flex-1" 
                 showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
@@ -240,7 +249,13 @@ export const ExploreScreen = () => {
                     marginBottom: GRID_GAP,
                   }}
                 >
-                  <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                  <Image 
+                    source={{ uri: img }} 
+                    style={{ flex: 1 }} 
+                    contentFit="cover"
+                    priority="high"
+                    transition={200}
+                  />
                 </TouchableOpacity>
               ))}
             </View>
@@ -271,7 +286,13 @@ export const ExploreScreen = () => {
                       marginBottom: GRID_GAP,
                     }}
                   >
-                    <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                    <Image 
+                    source={{ uri: img }} 
+                    style={{ flex: 1 }} 
+                    contentFit="cover"
+                    priority="high"
+                    transition={200}
+                  />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -290,7 +311,13 @@ export const ExploreScreen = () => {
                       marginBottom: GRID_GAP,
                     }}
                   >
-                    <Image source={{ uri: img }} style={{ flex: 1 }} contentFit="cover" />
+                    <Image 
+                    source={{ uri: img }} 
+                    style={{ flex: 1 }} 
+                    contentFit="cover"
+                    priority="high"
+                    transition={200}
+                  />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -317,6 +344,7 @@ export const ExploreScreen = () => {
               <ScrollView 
                 className="flex-1 bg-gray-50" 
                 showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}

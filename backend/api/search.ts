@@ -10,6 +10,9 @@ import { executeSearchWithMeta } from '../search/executeSearch';
 type SearchRequest = {
   query: string;
   userContext: UserContext;
+  radiusMiles?: number;
+  limit?: number;
+  offset?: number;
 };
 
 type SearchResponse = {
@@ -19,6 +22,12 @@ type SearchResponse = {
     usedProviders: Array<'places' | 'events'>;
     usedAI: boolean;
     cacheHit: boolean;
+  };
+  pagination: {
+    total: number;
+    offset: number;
+    limit: number;
+    hasMore: boolean;
   };
 };
 
@@ -57,6 +66,11 @@ export async function searchHandler(req: Request, res: Response): Promise<void> 
     const body = (req.body ?? {}) as Partial<SearchRequest>;
     const query = typeof body.query === 'string' ? body.query : '';
     const userContext = sanitizeUserContext(body.userContext);
+    
+    // Pagination & filtering parameters
+    const radiusMiles = isFiniteNumber(body.radiusMiles) ? body.radiusMiles : 10;
+    const limit = isFiniteNumber(body.limit) && body.limit > 0 && body.limit <= 100 ? body.limit : 20;
+    const offset = isFiniteNumber(body.offset) && body.offset >= 0 ? body.offset : 0;
 
     // Step 1: intent parsing (deterministic, never throws)
     const intent = parseSearchIntent(query);
@@ -72,15 +86,28 @@ export async function searchHandler(req: Request, res: Response): Promise<void> 
     await maybeRefineSemantics(intent, resolved, userContext);
 
     // Step 5: execution orchestrator (caching + provider calls + ranking)
-    const { ranked, meta } = await executeSearchWithMeta(intent, userContext);
+    // Pass radius for distance-based filtering
+    const { ranked, meta } = await executeSearchWithMeta(intent, userContext, { radiusMiles });
+    
+    // Apply pagination to ranked results
+    const allResults = safeResults(ranked.results);
+    const total = allResults.length;
+    const paginatedResults = allResults.slice(offset, offset + limit);
+    const hasMore = offset + limit < total;
 
     const response: SearchResponse = {
-      results: safeResults(ranked.results),
+      results: paginatedResults,
       meta: {
         intentType: intent.intentType,
         usedProviders: meta.usedProviders,
         usedAI: meta.usedAI,
         cacheHit: meta.cacheHit,
+      },
+      pagination: {
+        total,
+        offset,
+        limit,
+        hasMore,
       },
     };
 
@@ -101,6 +128,12 @@ export async function searchHandler(req: Request, res: Response): Promise<void> 
         usedProviders: [],
         usedAI: false,
         cacheHit: false,
+      },
+      pagination: {
+        total: 0,
+        offset: 0,
+        limit: 20,
+        hasMore: false,
       },
     };
 

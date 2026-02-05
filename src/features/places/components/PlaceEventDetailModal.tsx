@@ -152,7 +152,7 @@ export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
                 onPress={() => thumbsDown(item.id)}
                 className="flex-1 py-3 rounded-2xl items-center justify-center flex-row bg-gray-100"
               >
-                <Feather name="thumbs-down" size={18} color={myVote === 'down' ? '#111827' : '#6B7280'} />
+                <Feather name="thumbs-down" size={20} color={myVote === 'down' ? '#111827' : '#6B7280'} />
                 <Text className="ml-2 text-sm font-bold text-gray-900">Private</Text>
               </TouchableOpacity>
             </View>

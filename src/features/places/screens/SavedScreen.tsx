@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
 import { Icon, iconColors } from '@/components/Icon';
 import { mockPlaces } from '@/utils/mockData';
 
@@ -57,11 +58,54 @@ export const SavedScreen = () => {
         ))}
       </View>
 
-      {/* Saved Items Grid */}
-      <ScrollView
-        className="flex-1 px-4"
+      {/* Saved Items Grid - Virtualized with FlatList */}
+      <FlatList
+        data={mockPlaces}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 16 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ paddingBottom: 20, paddingTop: 8 }}
+        renderItem={({ item: place }) => (
+          <TouchableOpacity
+            className="mb-4"
+            style={{ width: CARD_WIDTH }}
+            activeOpacity={0.9}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }}
+          >
+            <View className="relative">
+              <Image
+                source={{ uri: place.imageUrls[0] }}
+                style={{ width: CARD_WIDTH, height: CARD_WIDTH, borderRadius: 12 }}
+                contentFit="cover"
+                priority="high"
+                transition={200}
+              />
+              <TouchableOpacity 
+                className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full"
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                }}
+              >
+                <Icon name="bookmark" size={16} color={iconColors.active} />
+              </TouchableOpacity>
+            </View>
+            <View className="mt-2">
+              <Text className="font-semibold text-gray-900" numberOfLines={1}>
+                {place.name}
+              </Text>
+              <View className="flex-row items-center mt-1">
+                <Icon name="map-pin" size={12} color={iconColors.default} />
+                <Text className="text-sm text-gray-500 ml-1">{place.location.city}</Text>
+                <Text className="mx-1 text-gray-300">•</Text>
+                <Icon name="star" size={12} color="#FBBF24" />
+                <Text className="text-sm text-gray-500 ml-1">{place.rating}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -71,71 +115,17 @@ export const SavedScreen = () => {
             progressBackgroundColor="#ffffff"
           />
         }
-      >
-        <View className="flex-row flex-wrap justify-between">
-          {mockPlaces.map((place) => (
-            <TouchableOpacity
-              key={place.id}
-              className="mb-4"
-              style={{ width: CARD_WIDTH }}
-            >
-              <View className="relative">
-                <Image
-                  source={{ uri: place.imageUrls[0] }}
-                  style={{ width: CARD_WIDTH, height: CARD_WIDTH, borderRadius: 12 }}
-                  contentFit="cover"
-                />
-                <TouchableOpacity className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full">
-                  <Icon name="bookmark" size={16} color={iconColors.active} />
-                </TouchableOpacity>
-              </View>
-              <View className="mt-2">
-                <Text className="font-semibold text-gray-900" numberOfLines={1}>
-                  {place.name}
-                </Text>
-                <View className="flex-row items-center mt-1">
-                  <Icon name="map-pin" size={12} color={iconColors.default} />
-                  <Text className="text-sm text-gray-500 ml-1">{place.location.city}</Text>
-                  <Text className="mx-1 text-gray-300">•</Text>
-                  <Icon name="star" size={12} color="#FBBF24" />
-                  <Text className="text-sm text-gray-500 ml-1">{place.rating}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-
-          {mockPlaces.map((place) => (
-            <TouchableOpacity
-              key={`${place.id}-2`}
-              className="mb-4"
-              style={{ width: CARD_WIDTH }}
-            >
-              <View className="relative">
-                <Image
-                  source={{ uri: place.imageUrls[0] }}
-                  style={{ width: CARD_WIDTH, height: CARD_WIDTH, borderRadius: 12 }}
-                  contentFit="cover"
-                />
-                <TouchableOpacity className="absolute top-2 right-2 bg-white/90 p-1.5 rounded-full">
-                  <Icon name="bookmark" size={16} color={iconColors.active} />
-                </TouchableOpacity>
-              </View>
-              <View className="mt-2">
-                <Text className="font-semibold text-gray-900" numberOfLines={1}>
-                  {place.name}
-                </Text>
-                <View className="flex-row items-center mt-1">
-                  <Icon name="map-pin" size={12} color={iconColors.default} />
-                  <Text className="text-sm text-gray-500 ml-1">{place.location.city}</Text>
-                  <Text className="mx-1 text-gray-300">•</Text>
-                  <Icon name="star" size={12} color="#FBBF24" />
-                  <Text className="text-sm text-gray-500 ml-1">{place.rating}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </ScrollView>
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        initialNumToRender={10}
+        getItemLayout={(data, index) => ({
+          length: CARD_WIDTH + 16, // card height + margin
+          offset: (CARD_WIDTH + 16) * Math.floor(index / 2),
+          index,
+        })}
+      />
     </SafeAreaView>
   );
 };
