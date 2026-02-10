@@ -188,13 +188,28 @@ export const HomeScreen = () => {
   const renderHeader = () => {
     if (viewMode === 'inbox') {
       return (
-        <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
-          <View className="flex-1 items-center">
-            <Text className="text-base font-semibold text-gray-900">Messages</Text>
+        <View className="bg-white border-b border-gray-100">
+          <View className="flex-row items-center justify-between px-4 py-3">
+            <TouchableOpacity 
+              className="w-8 h-8 items-center justify-center"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+            >
+              <Icon name="menu" size={22} color={iconColors.active} />
+            </TouchableOpacity>
+            <Text className="text-lg font-semibold text-gray-900 tracking-wide">
+              Messages
+            </Text>
+            <TouchableOpacity 
+              className="w-8 h-8 items-center justify-center"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+            >
+              <Icon name="edit-3" size={20} color={iconColors.active} />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity className="absolute right-4">
-            <Icon name="plus" size={20} color={iconColors.active} />
-          </TouchableOpacity>
         </View>
       );
     }
@@ -204,25 +219,42 @@ export const HomeScreen = () => {
     const subtitle = getSubtitle(selectedConversation);
 
     return (
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
-        <View className="flex-row items-center flex-1">
-          <TouchableOpacity onPress={handleBack} className="pr-3">
-            <Icon name="chevron-left" size={24} color={iconColors.active} />
+      <View className="bg-white border-b border-gray-100">
+        <View className="flex-row items-center justify-between px-4 py-3">
+          <TouchableOpacity 
+            onPress={() => {
+              handleBack();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }} 
+            className="w-8 h-8 items-center justify-center -ml-2"
+          >
+            <Icon name="chevron-left" size={28} color="#007AFF" />
           </TouchableOpacity>
-          <View>
-            <Text className="text-base font-semibold text-gray-900">
+          
+          <View className="flex-1 items-center">
+            <Text 
+              className="text-base font-semibold text-gray-900"
+              style={{ letterSpacing: 0.32 }}
+            >
               {selectedConversation.name}
             </Text>
             {subtitle ? (
               <Text className="text-xs text-gray-400 mt-0.5">{subtitle}</Text>
             ) : null}
           </View>
+          
+          {viewMode === 'chat' && (
+            <TouchableOpacity 
+              onPress={() => {
+                handleOpenDetails();
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+              className="w-8 h-8 items-center justify-center -mr-2"
+            >
+              <Icon name="info" size={20} color="#007AFF" />
+            </TouchableOpacity>
+          )}
         </View>
-        {viewMode === 'chat' && (
-          <TouchableOpacity onPress={handleOpenDetails}>
-            <Icon name="info" size={20} color={iconColors.active} />
-          </TouchableOpacity>
-        )}
       </View>
     );
   };
@@ -233,84 +265,143 @@ export const HomeScreen = () => {
     const { title, subtitle, ctaPrimary, ctaSecondary } = selectedConversation.plan;
 
     return (
-      <View className="border-b border-gray-100 bg-white px-4 py-2">
-        <View className="h-px bg-gray-100 mb-2" />
-        <View className="flex-row items-center justify-between">
+      <View 
+        className="border-b px-4 py-3"
+        style={{
+          backgroundColor: '#E6F0F9',
+          borderBottomColor: '#CCE1F3',
+        }}
+      >
+        <View className="flex-row items-center">
+          <View 
+            className="w-10 h-10 rounded-full items-center justify-center mr-3"
+            style={{ backgroundColor: '#00447C' }}
+          >
+            <Icon name="calendar" size={20} color="#FFFFFF" />
+          </View>
           <View className="flex-1 mr-3">
-            <Text className="text-xs text-gray-500 mb-0.5">This chat has a plan</Text>
-            <Text className="text-sm text-gray-900" numberOfLines={1}>
+            <Text 
+              className="text-xs font-semibold uppercase tracking-wide mb-0.5"
+              style={{ color: '#00447C' }}
+            >
+              Shared Plan
+            </Text>
+            <Text 
+              className="text-sm font-semibold text-gray-900" 
+              numberOfLines={1}
+              style={{ letterSpacing: 0.32 }}
+            >
               {title}
             </Text>
-            <Text className="text-xs text-gray-500 mt-0.5">{subtitle}</Text>
           </View>
-          <View className="flex-row items-center gap-2">
-            <TouchableOpacity className="px-3 py-1 rounded-full border border-gray-200">
-              <Text className="text-xs text-gray-700">{ctaPrimary}</Text>
+          <View className="flex-row items-center gap-1.5">
+            <TouchableOpacity 
+              className="px-3 py-1.5 rounded-full"
+              style={{ backgroundColor: '#00447C' }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+            >
+              <Text className="text-xs font-semibold text-white">{ctaPrimary}</Text>
             </TouchableOpacity>
-            <TouchableOpacity className="px-3 py-1 rounded-full border border-gray-200">
-              <Text className="text-xs text-gray-700">{ctaSecondary}</Text>
+            <TouchableOpacity 
+              className="px-3 py-1.5 rounded-full bg-white"
+              style={{ borderWidth: 1.5, borderColor: '#00447C' }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+            >
+              <Text className="text-xs font-semibold" style={{ color: '#00447C' }}>
+                {ctaSecondary}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
-        <View className="h-px bg-gray-100 mt-2" />
       </View>
     );
   };
 
   const renderInboxRow = useCallback(({ item }: { item: Conversation }) => {
     const initials = getInitials(item.name);
+    const unreadCount = item.unread ? (Math.floor(Math.random() * 3) + 1) : 0;
 
     return (
       <TouchableOpacity
-        className="flex-row items-center px-4 py-3 border-b border-gray-100 bg-white"
+        className="bg-white active:bg-gray-50"
         onPress={() => handleOpenConversation(item)}
-        activeOpacity={0.8}
+        activeOpacity={1}
       >
-        {/* Avatar */}
-        <View className="w-11 h-11 rounded-full bg-gray-100 items-center justify-center mr-3">
-          {item.isGroup ? (
-            <View className="flex-row -space-x-2">
-              <View className="w-6 h-6 rounded-full bg-gray-200 items-center justify-center">
-                <Text className="text-[10px] font-semibold text-gray-700">
-                  {getInitials(item.members[1]?.name ?? '')}
-                </Text>
-              </View>
-              <View className="w-6 h-6 rounded-full bg-gray-300 items-center justify-center">
-                <Text className="text-[10px] font-semibold text-gray-800">
-                  {getInitials(item.members[2]?.name ?? '')}
-                </Text>
-              </View>
+        <View className="flex-row items-center px-4 py-3">
+          {/* Avatar with online indicator */}
+          <View className="relative mr-3.5">
+            <View className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-100 to-blue-100 items-center justify-center">
+              {item.isGroup ? (
+                <View className="flex-row -space-x-2.5">
+                  <View className="w-7 h-7 rounded-full bg-purple-200 items-center justify-center border border-white">
+                    <Text className="text-[11px] font-bold text-purple-700">
+                      {getInitials(item.members[1]?.name ?? '')}
+                    </Text>
+                  </View>
+                  <View className="w-7 h-7 rounded-full bg-blue-200 items-center justify-center border border-white">
+                    <Text className="text-[11px] font-bold text-blue-700">
+                      {getInitials(item.members[2]?.name ?? '')}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text className="text-base font-bold text-gray-700">{initials}</Text>
+              )}
             </View>
-          ) : (
-            <Text className="text-xs font-semibold text-gray-800">{initials}</Text>
-          )}
-        </View>
-
-        {/* Text content */}
-        <View className="flex-1">
-          <View className="flex-row items-center justify-between mb-0.5">
-            <Text
-              className={`text-sm ${
-                item.unread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'
-              }`}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-            <Text className="ml-2 text-[11px] text-gray-400">{item.time}</Text>
-          </View>
-          <View className="flex-row items-center justify-between">
-            <Text
-              className={`text-xs text-gray-500 flex-1 ${item.unread ? 'font-medium' : ''}`}
-              numberOfLines={1}
-            >
-              {item.lastMessage}
-            </Text>
-            {item.unread && (
-              <View className="ml-2 w-2 h-2 rounded-full bg-gray-900" />
+            {/* Online indicator for DMs */}
+            {!item.isGroup && (
+              <View className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-green-500 border-2 border-white" />
             )}
           </View>
+
+          {/* Text content */}
+          <View className="flex-1 min-w-0">
+            <View className="flex-row items-baseline justify-between mb-1">
+              <Text
+                className={`text-base flex-1 ${
+                  item.unread ? 'font-semibold text-gray-900' : 'font-normal text-gray-900'
+                }`}
+                numberOfLines={1}
+                style={{ letterSpacing: 0.32 }}
+              >
+                {item.name}
+              </Text>
+              <Text 
+                className="text-[13px] text-gray-400 ml-2"
+                style={{ letterSpacing: 0.32 }}
+              >
+                {item.time}
+              </Text>
+            </View>
+            <View className="flex-row items-center">
+              <Text
+                className={`text-base flex-1 ${
+                  item.unread ? 'font-normal text-gray-900' : 'text-gray-400'
+                }`}
+                numberOfLines={1}
+                style={{ letterSpacing: 0.32 }}
+              >
+                {item.lastMessage}
+              </Text>
+              {item.unread && unreadCount > 0 && (
+                <View 
+                  className="ml-2 min-w-[20px] h-5 px-1.5 rounded-full items-center justify-center"
+                  style={{ backgroundColor: '#00447C' }}
+                >
+                  <Text className="text-[13px] font-medium text-white">
+                    {unreadCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
+        {/* iOS-style divider (inset from left, aligned with text) */}
+        <View className="h-[0.5px] bg-gray-200 ml-[72px]" />
       </TouchableOpacity>
     );
   }, [handleOpenConversation]);
@@ -323,19 +414,42 @@ export const HomeScreen = () => {
       selectedConversation.members.find((m) => m.id === message.senderId)?.name ?? '';
 
     const alignmentClass = isMe ? 'items-end' : 'items-start';
-    const bubbleBgClass = isMe ? 'bg-gray-900' : 'bg-gray-100';
-    const textColorClass = isMe ? 'text-white' : 'text-gray-900';
 
     return (
-      <View key={message.id} className={`mb-2 px-4 ${alignmentClass}`}>
+      <View key={message.id} className={`mb-1.5 px-4 ${alignmentClass}`}>
         {!isMe && isFirstForSender && selectedConversation.isGroup && (
-          <Text className="text-[11px] text-gray-400 mb-1">{senderName}</Text>
+          <Text className="text-xs text-gray-400 mb-1 ml-1">{senderName}</Text>
         )}
-        <View className={`max-w-[80%] rounded-2xl px-3 py-2 ${bubbleBgClass}`}>
-          <Text className={`text-sm ${textColorClass}`}>{message.text}</Text>
+        <View 
+          className={`max-w-[75%] px-4 py-2.5 ${
+            isMe 
+              ? 'rounded-t-[20px] rounded-bl-[20px] rounded-br-[4px]' 
+              : 'bg-gray-100 rounded-t-[20px] rounded-br-[20px] rounded-bl-[4px]'
+          }`}
+          style={isMe ? {
+            backgroundColor: '#007EE5',
+            shadowColor: '#007EE5',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+            elevation: 2,
+          } : {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.05,
+            shadowRadius: 2,
+            elevation: 1,
+          }}
+        >
+          <Text 
+            className={`text-[15px] leading-5 ${isMe ? 'text-white' : 'text-gray-900'}`}
+            style={{ letterSpacing: 0.32 }}
+          >
+            {message.text}
+          </Text>
         </View>
         {message.showTimestamp && (
-          <Text className="text-[10px] text-gray-400 mt-1">{message.time}</Text>
+          <Text className="text-[11px] text-gray-400 mt-1 mx-1">{message.time}</Text>
         )}
       </View>
     );
@@ -399,26 +513,64 @@ export const HomeScreen = () => {
   const renderInputBar = () => {
     if (viewMode !== 'chat' || !selectedConversation) return null;
 
+    const canSend = draftMessage.trim().length > 0;
+
     return (
       <SafeAreaView
         edges={['bottom']}
-        className="border-t border-gray-100 bg-white px-4 py-2"
+        className="border-t border-gray-200 bg-white px-3 py-2"
       >
-        <View className="flex-row items-center rounded-full bg-gray-50 px-3 py-2">
-          <TouchableOpacity className="mr-3">
-            <Icon name="plus" size={18} color={iconColors.default} />
+        <View className="flex-row items-end gap-2">
+          <TouchableOpacity 
+            className="w-9 h-9 items-center justify-center rounded-full bg-gray-100 mb-0.5"
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }}
+          >
+            <Icon name="plus" size={20} color={iconColors.active} />
           </TouchableOpacity>
-          <TextInput
-            value={draftMessage}
-            onChangeText={setDraftMessage}
-            placeholder="Message..."
-            placeholderTextColor="#9CA3AF"
-            className="flex-1 text-sm text-gray-900"
-            multiline={false}
-          />
-          <TouchableOpacity className="ml-3">
-            <Icon name="send" size={18} color={iconColors.active} />
-          </TouchableOpacity>
+          
+          <View className="flex-1 bg-gray-100 rounded-[20px] px-4 py-2 min-h-[36px] justify-center">
+            <TextInput
+              value={draftMessage}
+              onChangeText={setDraftMessage}
+              placeholder="iMessage"
+              placeholderTextColor="#8E8E93"
+              className="text-base text-gray-900"
+              style={{ letterSpacing: 0.32, lineHeight: 20 }}
+              multiline={true}
+              maxLength={500}
+            />
+          </View>
+          
+          {canSend ? (
+            <TouchableOpacity 
+              className="w-9 h-9 items-center justify-center rounded-full mb-0.5"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                setDraftMessage('');
+              }}
+              style={{
+                backgroundColor: '#007EE5',
+                shadowColor: '#007EE5',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.35,
+                shadowRadius: 4,
+                elevation: 3,
+              }}
+            >
+              <Icon name="arrow-up" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              className="w-9 h-9 items-center justify-center mb-0.5"
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              }}
+            >
+              <Icon name="mic" size={22} color={iconColors.default} />
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -506,7 +658,8 @@ export const HomeScreen = () => {
   const renderContent = () => {
     if (viewMode === 'inbox') {
       return (
-        <View className="flex-1 bg-gray-50">
+        <View className="flex-1 bg-white">
+          {/* Messages List */}
           <FlatList
             data={mockConversations}
             keyExtractor={(item) => item.id}
@@ -527,8 +680,8 @@ export const HomeScreen = () => {
             windowSize={7}
             initialNumToRender={15}
             getItemLayout={(data, index) => ({
-              length: 76, // approximate row height
-              offset: 76 * index,
+              length: 80, // updated row height
+              offset: 80 * index,
               index,
             })}
           />

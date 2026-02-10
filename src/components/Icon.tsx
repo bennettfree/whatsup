@@ -44,6 +44,7 @@ export type IconName =
   | 'pause'
   | 'volume-2'
   | 'music'
+  | 'mic'
   // Misc
   | 'calendar'
   | 'clock'
@@ -78,14 +79,19 @@ interface IconProps {
   strokeWidth?: number;
 }
 
-// Default colors
+// Brand colors - Premium blue theme
 export const iconColors = {
   default: '#9CA3AF',     // Gray-400 - inactive/subtle
-  active: '#111827',      // Gray-900 - active/selected
-  primary: '#E25C50',     // Primary brand color
+  active: '#00447C',      // Deep blue - active/selected (primary brand)
+  primary: '#00447C',     // Deep blue - primary brand color
+  secondary: '#007EE5',   // Light blue - secondary brand color
   muted: '#D1D5DB',       // Gray-300 - very subtle
   white: '#FFFFFF',
   black: '#000000',
+  gradient: {
+    start: '#00447C',     // Deep blue
+    end: '#FFFFFF',       // White
+  },
 };
 
 export const Icon = ({

@@ -9,6 +9,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import Svg, { Defs, LinearGradient as SvgLinearGradient, Path, Stop } from 'react-native-svg';
 import Slider from '@react-native-community/slider';
 import { Icon, iconColors } from '@/components/Icon';
+import { useTheme } from '@/contexts/ThemeContext';
 import { mockPlaces, mockEvents, formatHours } from '@/utils/mockData';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { classifyQuery, mapVenueTypeToCategory, mapEventTypeToCategory, type ParsedQuery } from '@/utils/searchHelpers';
@@ -57,12 +58,12 @@ const CurrentLocationGradientIcon = ({ size = 24 }: { size?: number }) => {
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Defs>
         <SvgLinearGradient id="navGradient" x1="2" y1="2" x2="22" y2="22">
-          <Stop offset="0" stopColor="#22C55E" />
-          <Stop offset="0.5" stopColor="#3B82F6" />
-          <Stop offset="1" stopColor="#A855F7" />
+          <Stop offset="0" stopColor="#00447C" />
+          <Stop offset="0.5" stopColor="#007EE5" />
+          <Stop offset="1" stopColor="#3399FF" />
         </SvgLinearGradient>
       </Defs>
-      {/* Centered "current location" crosshair (gradient fill) */}
+      {/* Centered "current location" crosshair (blue brand gradient) */}
       <Path
         fill="url(#navGradient)"
         d="M12 8a4 4 0 1 0 0 8a4 4 0 0 0 0-8Zm8.94 3A8.96 8.96 0 0 0 13 3.06V1h-2v2.06A8.96 8.96 0 0 0 3.06 11H1v2h2.06A8.96 8.96 0 0 0 11 20.94V23h2v-2.06A8.96 8.96 0 0 0 20.94 13H23v-2h-2.06ZM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"
@@ -71,23 +72,23 @@ const CurrentLocationGradientIcon = ({ size = 24 }: { size?: number }) => {
   );
 };
 
-// Expanded category colors - all unique
+// Category colors - Premium blue theme with complementary accents
 const categoryColors: Record<string, string> = {
-  bar: '#DC2626',
-  club: '#DC2626',
-  restaurant: '#F97316',
-  cafe: '#A855F7',
-  coffee: '#A855F7',
-  event: '#EC4899',
-  music: '#EC4899',
-  museum: '#3B82F6',
-  gallery: '#3B82F6',
-  park: '#22C55E',
-  hotel: '#8B5CF6',
-  shopping: '#F59E0B',
-  spa: '#14B8A6',
-  gym: '#F43F5E',
-  default: '#6B7280',
+  bar: '#00447C',         // Deep blue (primary)
+  club: '#00447C',
+  restaurant: '#007EE5',  // Light blue (secondary)
+  cafe: '#007EE5',
+  coffee: '#007EE5',
+  event: '#00447C',       // Deep blue for events
+  music: '#007EE5',       // Light blue for music
+  museum: '#00447C',
+  gallery: '#007EE5',
+  park: '#10B981',        // Keep green for parks (nature)
+  hotel: '#00447C',
+  shopping: '#007EE5',
+  spa: '#14B8A6',         // Keep teal for wellness
+  gym: '#00447C',
+  default: '#00447C',     // Default to primary brand color
 };
 
 const getCategoryColor = (category: string): string => {
@@ -1705,6 +1706,12 @@ export const MapScreen = () => {
   
   // Distance filter state (lifted from WhatsHappeningSheet for API integration)
   const [distanceMiles, setDistanceMiles] = useState(10);
+  
+  // Search context preservation - never lose user's results on navigation
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
+  const [cachedResults, setCachedResults] = useState<SearchResultItem[]>([]);
+  const searchCacheTimestampRef = useRef(0);
+  const SEARCH_CACHE_TTL_MS = 300000; // 5 minutes
 
   // Treat programmatic snaps as one-shot commands.
   // This prevents later re-renders / data refreshes from accidentally reusing a stale target position.
@@ -2095,19 +2102,35 @@ export const MapScreen = () => {
     q: string,
     centerLat: number,
     centerLng: number,
-    opts?: { append?: boolean; radiusMiles?: number }
+    opts?: { append?: boolean; radiusMiles?: number; forceRefresh?: boolean }
   ) => {
     const seq = ++runSearchSeqRef.current;
     const tz = Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone || 'UTC';
     const nowISO = new Date().toISOString();
     const isAppending = opts?.append || false;
+    const forceRefresh = opts?.forceRefresh || false;
     const radius = opts?.radiusMiles ?? distanceMiles;
     const offset = isAppending ? currentOffset + SEARCH_PAGE_SIZE : 0;
+
+    // Smart caching: check if we have recent results for this exact query
+    if (!isAppending && !forceRefresh) {
+      const cacheKey = `${q.trim()}_${Math.round(centerLat * 100)}_${Math.round(centerLng * 100)}_${radius}`;
+      const now = Date.now();
+      const cacheAge = now - searchCacheTimestampRef.current;
+      
+      if (cachedResults.length > 0 && lastSearchQuery === q && cacheAge < SEARCH_CACHE_TTL_MS) {
+        console.log('✅ Using cached search results (age:', Math.round(cacheAge / 1000), 'seconds)');
+        setResults(cachedResults);
+        setResultsSource('backend');
+        return; // Skip API call, use cache
+      }
+    }
 
     // Track current query for pagination
     if (!isAppending) {
       currentSearchQueryRef.current = q;
       setCurrentOffset(0);
+      setLastSearchQuery(q);
     }
 
     try {
@@ -2194,10 +2217,17 @@ export const MapScreen = () => {
           // Deduplicate by ID
           const seen = new Set(prev.map((r) => r.id));
           const unique = newResults.filter((r) => !seen.has(r.id));
-          return [...prev, ...unique];
+          const merged = [...prev, ...unique];
+          // Update cache with merged results
+          setCachedResults(merged);
+          searchCacheTimestampRef.current = Date.now();
+          return merged;
         });
       } else {
         setResults(newResults);
+        // Cache new results
+        setCachedResults(newResults);
+        searchCacheTimestampRef.current = Date.now();
         
         // Smart sheet positioning based on results (only when in search mode and not manually positioned)
         if (isSearchMode && q && !isSearchInputFocused) {
@@ -2298,6 +2328,8 @@ export const MapScreen = () => {
   };
 
   const handleBackFromSearch = () => {
+    // IMPORTANT: Preserve search results - don't clear them!
+    // User can navigate back and forth without losing their search context.
     setIsSearchMode(false);
     setSearchQuery('');
     setShouldExpandSheet(false);
@@ -2307,13 +2339,11 @@ export const MapScreen = () => {
     setActivePlaceId(null);
     setActiveEventId(null);
     setSelectedItemForDetail(null);
-    setResults([]); // Clear results to show What's Happening view
-    setCurrentOffset(0);
-    setHasMoreResults(false);
+    // Results are preserved - only cleared on new search or explicit clear
   };
 
   const exitSearchToWhatsHappening = () => {
-    // User explicitly finished searching; return to What's Happening.
+    // User explicitly finished searching; clear search and return to What's Happening.
     searchInputRef.current?.blur();
     setSearchQuery('');
     setIsSearchMode(false);
@@ -2326,6 +2356,9 @@ export const MapScreen = () => {
     setIsSheetVisible(true);
     setSheetTargetPosition('partial');
     setSheetAnimationKey((k) => k + 1);
+    setCurrentOffset(0);
+    setHasMoreResults(false);
+    // Refresh What's Happening with current location
     void runSearch('', region.latitude, region.longitude);
   };
 
@@ -2676,35 +2709,54 @@ export const MapScreen = () => {
     }
   };
 
-  // Debounced unified search as map moves (thresholded)
+  // Smart What's Happening refresh (ONLY in true browse mode)
+  // CRITICAL: Extremely conservative - never disrupts user's search experience
   useEffect(() => {
-    // Don't refresh results while user is browsing search results or a detail view.
-    // This prevents clicking a result (which recenters the map) from overwriting the user's search list.
-    if (isSearchMode || selectedItemForDetail || isSearchInputFocused) return;
+    // STRICT CONDITIONS: Never run while:
+    // 1. User has search results (preserve their search)
+    // 2. User is in search mode (browsing results)
+    // 3. User is viewing details (don't disrupt)
+    // 4. Search input is focused (typing)
+    // 5. User has typed a query (even if not submitted)
+    if (
+      results.length > 0 ||
+      isSearchMode ||
+      selectedItemForDetail ||
+      isSearchInputFocused ||
+      searchQuery.trim().length > 0
+    ) {
+      return;
+    }
 
     let isMounted = true;
     let timeoutId: NodeJS.Timeout;
 
     const last = lastSearchRegionRef.current;
+    // Higher threshold: only refresh if user moved significantly (>0.5 miles)
     const movedEnough =
       !last ||
-      Math.abs(last.latitude - region.latitude) > 0.002 ||
-      Math.abs(last.longitude - region.longitude) > 0.002 ||
-      Math.abs(last.latitudeDelta - region.latitudeDelta) > 0.01 ||
-      Math.abs(last.longitudeDelta - region.longitudeDelta) > 0.01;
+      Math.abs(last.latitude - region.latitude) > 0.008 || // ~0.5 miles (was 0.002)
+      Math.abs(last.longitude - region.longitude) > 0.008 ||
+      Math.abs(last.latitudeDelta - region.latitudeDelta) > 0.03; // Zoom change (was 0.01)
 
     if (!movedEnough) return;
     lastSearchRegionRef.current = region;
 
+    // Long debounce: wait for user to settle (1.5s)
     timeoutId = setTimeout(async () => {
       if (!isMounted) return;
+      
+      // Final safety check: user hasn't started action in meantime
+      if (isSearchMode || results.length > 0 || searchQuery.trim().length > 0) return;
+      
       try {
         setIsLoadingRemote(true);
-        await runSearch(searchQuery.trim(), region.latitude, region.longitude);
+        // Browse mode only: refresh What's Happening for new area
+        await runSearch('', region.latitude, region.longitude);
       } finally {
         if (isMounted) setIsLoadingRemote(false);
       }
-    }, 500);
+    }, 1500); // Increased from 500ms to 1500ms
     
     return () => {
       isMounted = false;
@@ -2719,6 +2771,7 @@ export const MapScreen = () => {
     region.longitudeDelta,
     searchQuery,
     selectedItemForDetail,
+    results.length, // Added: prevent refresh when results exist
   ]);
 
   // Generate location-aware mock data based on user's actual location
@@ -2938,9 +2991,9 @@ export const MapScreen = () => {
               onPressOut={handleRecenterPressOut}
               className="bg-white w-14 h-14 rounded-full items-center justify-center"
               style={{ 
-                shadowColor: '#000',
+                shadowColor: '#007EE5',
                 shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.15,
+                shadowOpacity: 0.25,
                 shadowRadius: 12,
                 elevation: 8
               }}
@@ -2983,37 +3036,55 @@ export const MapScreen = () => {
               />
               {isSearching ? (
                 <ActivityIndicator size="small" color={iconColors.primary} />
+              ) : (isSearchMode || searchQuery.length > 0) ? (
+                <TouchableOpacity 
+                  onPress={exitSearchToWhatsHappening}
+                  className="ml-2 w-8 h-8 items-center justify-center rounded-full"
+                  activeOpacity={0.6}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Icon name="x" size={18} color={iconColors.default} />
+                </TouchableOpacity>
               ) : (
-                (isSearchMode || searchQuery.length > 0) && (
-                  <TouchableOpacity 
-                    onPress={exitSearchToWhatsHappening}
-                    className="ml-2"
-                  >
-                    <Icon name="x" size={18} color={iconColors.default} />
-                  </TouchableOpacity>
-                )
+                <TouchableOpacity 
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    // Voice search placeholder - will be implemented later
+                  }}
+                  className="ml-2 w-8 h-8 items-center justify-center rounded-full active:bg-gray-100"
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                >
+                  <Icon name="mic" size={20} color={iconColors.active} />
+                </TouchableOpacity>
               )}
             </View>
           </Animated.View>
 
-          {/* Data Source Indicator */}
+          {/* Data Source Indicator - Blue theme */}
           <View className="absolute left-4" style={{ top: insets.top + 12 }}>
-            <View className={`px-3 py-1.5 rounded-full flex-row items-center shadow-lg ${
-              resultsSource === 'backend'
-                ? 'bg-green-500'
-                : resultsSource === 'mock'
-                  ? 'bg-orange-500'
-                  : 'bg-red-500'
-            }`}>
-              <View className={`w-2 h-2 rounded-full mr-2 ${
-                'bg-white'
-              }`} />
-              <Text className="text-xs font-bold text-white">
+            <View 
+              className="px-3 py-1.5 rounded-full flex-row items-center shadow-lg"
+              style={{
+                backgroundColor: resultsSource === 'backend' 
+                  ? '#007EE5'
+                  : resultsSource === 'mock'
+                    ? '#F59E0B'
+                    : '#EF4444',
+                shadowColor: resultsSource === 'backend' ? '#007EE5' : '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                elevation: 4,
+              }}
+            >
+              <View className="w-2 h-2 rounded-full mr-2 bg-white" />
+              <Text className="text-xs font-bold text-white tracking-wide">
                 {resultsSource === 'backend'
                   ? 'LIVE DATA'
                   : resultsSource === 'mock'
                     ? 'MOCK DATA'
-                    : 'BACKEND OFFLINE'}
+                    : 'OFFLINE'}
               </Text>
             </View>
           </View>

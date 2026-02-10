@@ -91,7 +91,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleSettings = () => {
-    console.log('Settings');
+    navigation.navigate('Settings');
   };
 
   const handleOpenMoment = useCallback((moment: Moment) => {
@@ -165,14 +165,22 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
-      {/* App Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
-        <View className="w-6" />
-        <Text className="text-base font-semibold text-gray-900">
+      {/* Header - settings icon aligned with profile picture */}
+      <View className="relative py-3 bg-gray-50">
+        <Text className="text-base font-semibold text-gray-900 text-center">
           {isOwnProfile ? 'You' : 'Profile'}
         </Text>
-        <TouchableOpacity onPress={handleSettings}>
-          <Icon name="settings" size={20} color={iconColors.active} />
+        {/* Settings button positioned to align with profile picture right edge */}
+        <TouchableOpacity 
+          onPress={handleSettings}
+          className="absolute right-4 top-2.5 w-10 h-10 items-center justify-center rounded-full"
+          activeOpacity={0.6}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{
+            transform: [{ translateX: 0 }],
+          }}
+        >
+          <Icon name="settings" size={22} color={iconColors.active} />
         </TouchableOpacity>
       </View>
 
@@ -243,8 +251,16 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             {isOwnProfile ? (
               <TouchableOpacity
                 onPress={handleEditProfile}
-                className="w-full py-2.5 rounded-full bg-gray-900 items-center"
+                className="w-full py-2.5 rounded-full items-center"
                 activeOpacity={0.9}
+                style={{
+                  backgroundColor: '#00447C',
+                  shadowColor: '#00447C',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 4,
+                  elevation: 3,
+                }}
               >
                 <Text className="text-sm font-semibold text-white">
                   Edit profile
@@ -253,39 +269,41 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             ) : (
               <View className="flex-row gap-2">
                 <TouchableOpacity
-                  className="flex-1 py-2.5 rounded-full bg-gray-900 items-center"
+                  className="flex-1 py-2.5 rounded-full items-center"
                   activeOpacity={0.9}
+                  style={{
+                    backgroundColor: '#00447C',
+                    shadowColor: '#00447C',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }}
                 >
                   <Text className="text-sm font-semibold text-white">
                     Follow
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  className="flex-1 py-2.5 rounded-full bg-gray-100 items-center"
+                  className="flex-1 py-2.5 rounded-full items-center"
                   activeOpacity={0.9}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderWidth: 1.5,
+                    borderColor: '#00447C',
+                  }}
                 >
-                  <Text className="text-sm font-semibold text-gray-900">
+                  <Text className="text-sm font-semibold" style={{ color: '#00447C' }}>
                     Message
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
-
-          {/* Divider */}
-          <View className="px-4 mt-2 mb-2">
-            <View className="h-px bg-gray-200" />
-          </View>
         </View>
 
         {/* Moments Section */}
         <View className="bg-gray-50 pt-2 pb-1">
-          <View className="px-4 py-2">
-            <Text className="text-base font-semibold text-gray-900 text-center tracking-wide">
-              Moments
-            </Text>
-          </View>
-
           {mockMoments.length === 0 ? (
             <View className="items-center justify-center mt-12 px-8 pb-12">
               <View className="w-20 h-20 bg-gray-200 rounded-full items-center justify-center mb-4">

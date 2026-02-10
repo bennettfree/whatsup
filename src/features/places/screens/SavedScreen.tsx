@@ -42,10 +42,19 @@ export const SavedScreen = () => {
         {tabs.map((tab) => (
           <TouchableOpacity
             key={tab.key}
-            onPress={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 rounded-full ${
-              activeTab === tab.key ? 'bg-gray-900' : 'bg-gray-100'
-            }`}
+            onPress={() => {
+              setActiveTab(tab.key);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }}
+            className="px-4 py-2 rounded-full"
+            style={{
+              backgroundColor: activeTab === tab.key ? '#00447C' : '#F3F4F6',
+              shadowColor: activeTab === tab.key ? '#00447C' : 'transparent',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: activeTab === tab.key ? 0.25 : 0,
+              shadowRadius: 3,
+              elevation: activeTab === tab.key ? 2 : 0,
+            }}
           >
             <Text
               className={`font-medium ${

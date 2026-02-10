@@ -43,7 +43,7 @@ export const ProfileHeader = ({
 
           {/* Username */}
           <Text
-            className="mt-1 text-sm text-gray-500"
+            className="mt-0.5 text-sm text-gray-500"
             numberOfLines={1}
             ellipsizeMode="tail"
           >

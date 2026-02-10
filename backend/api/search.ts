@@ -6,6 +6,7 @@ import { buildProviderPlan } from '../search/buildProviderPlan';
 import { resolveSearchPlan } from '../search/resolveSearchPlan';
 import { maybeRefineSemantics } from '../search/semanticRefinement';
 import { executeSearchWithMeta } from '../search/executeSearch';
+import { enhanceResults } from '../search/qualityEnhancer';
 
 type SearchRequest = {
   query: string;
@@ -89,8 +90,45 @@ export async function searchHandler(req: Request, res: Response): Promise<void> 
     // Pass radius for distance-based filtering
     const { ranked, meta } = await executeSearchWithMeta(intent, userContext, { radiusMiles });
     
-    // Apply pagination to ranked results
-    const allResults = safeResults(ranked.results);
+    // Step 6: Quality enhancement (NEW)
+    // Ensures high-quality, diverse results that meet minimum thresholds
+    let { enhanced, quality, applied } = enhanceResults(safeResults(ranked.results), {
+      minResults: 15,
+      minRating: 3.5,
+      maxSameCategory: 0.3,
+      preferOpenNow: true,
+    });
+    
+    // Step 7: Progressive expansion if results insufficient (NEW)
+    // If quality is poor and suggestions include expand_radius, try wider search
+    if (quality.suggestions.includes('expand_radius') && quality.count < 10 && offset === 0) {
+      // Only expand on initial search (offset=0), not during pagination
+      const expandedRadius = radiusMiles * 2; // Double the radius
+      if (expandedRadius <= 50) { // Cap at 50 miles
+        console.log(`[qualityEnhancer] Insufficient results (${quality.count}), expanding radius ${radiusMiles}mi → ${expandedRadius}mi`);
+        
+        // Re-execute with expanded radius
+        const { ranked: expandedRanked } = await executeSearchWithMeta(intent, userContext, { radiusMiles: expandedRadius });
+        const expandedEnhanced = enhanceResults(safeResults(expandedRanked.results), {
+          minResults: 15,
+          minRating: 3.0, // Slightly relax rating for expanded search
+          maxSameCategory: 0.3,
+          preferOpenNow: true,
+        });
+        
+        enhanced = expandedEnhanced.enhanced;
+        quality = expandedEnhanced.quality;
+        applied.push(`radius_expansion (${radiusMiles}mi→${expandedRadius}mi)`);
+      }
+    }
+    
+    // Log quality assessment for monitoring
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[qualityEnhancer] Quality: ${quality.quality}, Count: ${quality.count}, AvgRating: ${quality.avgRating.toFixed(2)}, Applied: ${applied.join(', ')}`);
+    }
+    
+    // Apply pagination to enhanced results
+    const allResults = enhanced;
     const total = allResults.length;
     const paginatedResults = allResults.slice(offset, offset + limit);
     const hasMore = offset + limit < total;

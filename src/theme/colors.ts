@@ -1,57 +1,64 @@
+/**
+ * App Color System - Premium Blue Theme
+ * 
+ * Primary: Deep Blue (#00447C)
+ * Secondary: Light Blue (#007EE5)
+ * Gradients: Blue to White for modern, clean aesthetics
+ */
+
 export const colors = {
-  // Primary brand - warm coral/red
+  // Brand colors
   primary: {
-    50: '#fdf4f3',
-    100: '#fce8e6',
-    200: '#fad4d1',
-    300: '#f5b3ad',
-    400: '#ed857c',
-    500: '#e25c50',
-    600: '#cf4033',
-    700: '#ad3228',
-    800: '#8f2d25',
-    900: '#772b25',
-    950: '#40130f',
+    DEFAULT: '#00447C',
+    light: '#007EE5',
+    dark: '#003366',
+    50: '#E6F0F9',
+    100: '#CCE1F3',
+    200: '#99C3E7',
+    300: '#66A5DB',
+    400: '#3387CF',
+    500: '#007EE5',
+    600: '#00447C',
+    700: '#003366',
+    800: '#002850',
+    900: '#001D3A',
   },
-  // Accent - fresh green for ratings/success
-  accent: {
-    50: '#f0fdf4',
-    100: '#dcfce7',
-    200: '#bbf7d0',
-    300: '#86efac',
-    400: '#4ade80',
-    500: '#22c55e',
-    600: '#16a34a',
-    700: '#15803d',
-    800: '#166534',
-    900: '#14532d',
-    950: '#052e16',
+  
+  // Gradients
+  gradients: {
+    primary: ['#00447C', '#007EE5'],
+    primaryToWhite: ['#00447C', '#FFFFFF'],
+    lightToWhite: ['#007EE5', '#FFFFFF'],
+    subtle: ['#E6F0F9', '#FFFFFF'],
   },
-  // Neutral grays
-  gray: {
-    50: '#f9fafb',
-    100: '#f3f4f6',
-    200: '#e5e7eb',
-    300: '#d1d5db',
-    400: '#9ca3af',
-    500: '#6b7280',
-    600: '#4b5563',
-    700: '#374151',
-    800: '#1f2937',
-    900: '#111827',
-    950: '#030712',
-  },
+  
   // Semantic colors
-  success: '#22c55e',
-  warning: '#f59e0b',
-  error: '#ef4444',
-  info: '#3b82f6',
-  // Base
-  white: '#ffffff',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  info: '#007EE5',
+  
+  // Neutrals
+  gray: {
+    50: '#F9FAFB',
+    100: '#F3F4F6',
+    200: '#E5E7EB',
+    300: '#D1D5DB',
+    400: '#9CA3AF',
+    500: '#6B7280',
+    600: '#4B5563',
+    700: '#374151',
+    800: '#1F2937',
+    900: '#111827',
+  },
+  
+  white: '#FFFFFF',
   black: '#000000',
-} as const;
+};
 
-export type ColorKey = keyof typeof colors;
-
-
-
+// Gradient helpers for React Native
+export const createLinearGradient = (type: keyof typeof colors.gradients) => ({
+  colors: colors.gradients[type],
+  start: { x: 0, y: 0 },
+  end: { x: 1, y: 1 },
+});

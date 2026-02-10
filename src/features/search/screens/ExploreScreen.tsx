@@ -143,7 +143,7 @@ export const ExploreScreen = () => {
               style={{
                 fontSize: 15,
                 fontWeight: activeFeed === 'explore' ? '600' : '500',
-                color: activeFeed === 'explore' ? '#111827' : '#9CA3AF',
+                color: activeFeed === 'explore' ? '#00447C' : '#9CA3AF',
                 letterSpacing: 0.2,
               }}
             >
@@ -163,7 +163,7 @@ export const ExploreScreen = () => {
               style={{
                 fontSize: 15,
                 fontWeight: activeFeed === 'friends' ? '600' : '500',
-                color: activeFeed === 'friends' ? '#111827' : '#9CA3AF',
+                color: activeFeed === 'friends' ? '#00447C' : '#9CA3AF',
                 letterSpacing: 0.2,
               }}
             >
@@ -178,7 +178,7 @@ export const ExploreScreen = () => {
               bottom: 0,
               height: 3,
               width: 60,
-              backgroundColor: '#111827',
+              backgroundColor: '#00447C',
               borderRadius: 1.5,
               left: 16 + (SCREEN_WIDTH - 32) / 4 - 30, // Center under Explore button
               transform: [{
@@ -187,6 +187,11 @@ export const ExploreScreen = () => {
                   outputRange: [0, (SCREEN_WIDTH - 32) / 2], // Move to center of Friends button
                 }),
               }],
+              shadowColor: '#00447C',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.3,
+              shadowRadius: 2,
+              elevation: 2,
             }}
           />
           

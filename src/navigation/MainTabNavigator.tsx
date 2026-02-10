@@ -132,15 +132,15 @@ export const MainTabNavigator = () => {
             />
           );
         },
-        tabBarActiveTintColor: iconColors.active,
+        tabBarActiveTintColor: '#00447C',
         tabBarInactiveTintColor: iconColors.default,
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopColor: '#f3f4f6',
           borderTopWidth: 1,
-          paddingBottom: 8,
-          paddingTop: 8,
-          height: 65,
+          paddingTop: 12,
+          paddingBottom: 0, // Let safe area handle bottom padding
+          minHeight: 65,
           elevation: 0,
           shadowOpacity: 0,
         },
@@ -151,9 +151,10 @@ export const MainTabNavigator = () => {
         },
         tabBarShowLabel: false,
         
-        // Tab bar item styling for better touch targets
+        // Tab bar item styling for better touch targets and spacing
         tabBarItemStyle: {
-          paddingVertical: 4,
+          paddingVertical: 8,
+          paddingBottom: 4,
         },
       })}
     >

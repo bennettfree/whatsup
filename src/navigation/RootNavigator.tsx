@@ -5,6 +5,7 @@ import { View, Text } from 'react-native';
 import type { RootStackParamList } from './types';
 import { MainTabNavigator } from './MainTabNavigator';
 import MomentDetailScreen from '@/features/profile/screens/MomentDetailScreen';
+import { SettingsScreen } from '@/features/profile/screens/SettingsScreen';
 import PlaceDetailScreen from '@/features/places/screens/PlaceDetailScreen';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { mockUser } from '@/utils/mockData';
@@ -26,12 +27,6 @@ const SearchScreen = () => (
 const UserProfileScreen = () => (
   <View className="flex-1 items-center justify-center bg-white">
     <Text className="text-xl font-bold">User Profile</Text>
-  </View>
-);
-
-const SettingsScreen = () => (
-  <View className="flex-1 items-center justify-center bg-white">
-    <Text className="text-xl font-bold">Settings</Text>
   </View>
 );
 
@@ -97,9 +92,8 @@ export const RootNavigator = () => {
               name="Settings" 
               component={SettingsScreen}
               options={{
-                headerShown: true,
-                headerTitle: 'Settings',
-                headerBackTitle: 'Back',
+                headerShown: false,
+                animation: 'slide_from_right',
               }}
             />
           </>
