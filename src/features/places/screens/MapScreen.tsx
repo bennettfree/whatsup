@@ -24,10 +24,14 @@ type SearchResultItem = UnifiedSearchResult;
 function isLikelyGoogleIconUrl(url?: string): boolean {
   if (!url) return false;
   const u = url.toLowerCase();
+  // Check for all Google icon URL patterns
   return (
     u.includes('maps.gstatic.com') ||
     u.includes('gstatic.com/mapfiles') ||
-    u.includes('place_api/icons')
+    u.includes('gstatic.com/images') ||
+    u.includes('place_api/icons') ||
+    u.includes('/icon') ||
+    u.endsWith('.png') && u.includes('gstatic')
   );
 }
 
@@ -73,22 +77,44 @@ const CurrentLocationGradientIcon = ({ size = 24 }: { size?: number }) => {
 };
 
 // Category colors - Premium blue theme with complementary accents
+// Modern color system - each category gets unique, coordinated color
 const categoryColors: Record<string, string> = {
-  bar: '#00447C',         // Deep blue (primary)
-  club: '#00447C',
-  restaurant: '#007EE5',  // Light blue (secondary)
-  cafe: '#007EE5',
-  coffee: '#007EE5',
-  event: '#00447C',       // Deep blue for events
-  music: '#007EE5',       // Light blue for music
-  museum: '#00447C',
-  gallery: '#007EE5',
-  park: '#10B981',        // Keep green for parks (nature)
-  hotel: '#00447C',
-  shopping: '#007EE5',
-  spa: '#14B8A6',         // Keep teal for wellness
-  gym: '#00447C',
-  default: '#00447C',     // Default to primary brand color
+  bar: '#7C3AED',          // Deep Purple - nightlife energy
+  club: '#A855F7',         // Electric Purple - party vibes
+  restaurant: '#F97316',   // Warm Orange - food/warmth
+  cafe: '#92400E',         // Coffee Brown - coffee tones
+  coffee: '#92400E',       // Coffee Brown
+  event: '#EC4899',        // Vibrant Pink - entertainment
+  music: '#EC4899',        // Vibrant Pink - music events
+  museum: '#3B82F6',       // Royal Blue - culture/knowledge
+  gallery: '#6366F1',      // Indigo - art galleries
+  park: '#10B981',         // Nature Green - outdoor spaces
+  hotel: '#1E40AF',        // Navy - hospitality
+  shopping: '#F59E0B',     // Gold - retail/luxury
+  spa: '#14B8A6',          // Aqua Teal - wellness/spa
+  gym: '#EF4444',          // Energetic Red - fitness
+  other: '#6B7280',        // Neutral Gray - miscellaneous
+  default: '#00447C',      // Brand Primary - fallback
+};
+
+// Gradient colors for clustered markers (modern depth effect)
+const categoryGradients: Record<string, string[]> = {
+  bar: ['#7C3AED', '#9333EA'],
+  club: ['#A855F7', '#C084FC'],
+  restaurant: ['#F97316', '#FB923C'],
+  cafe: ['#92400E', '#B45309'],
+  coffee: ['#92400E', '#B45309'],
+  event: ['#EC4899', '#F472B6'],
+  music: ['#EC4899', '#F472B6'],
+  museum: ['#3B82F6', '#60A5FA'],
+  gallery: ['#6366F1', '#818CF8'],
+  park: ['#10B981', '#34D399'],
+  hotel: ['#1E40AF', '#3B82F6'],
+  shopping: ['#F59E0B', '#FBBF24'],
+  spa: ['#14B8A6', '#2DD4BF'],
+  gym: ['#EF4444', '#F87171'],
+  other: ['#6B7280', '#9CA3AF'],
+  default: ['#00447C', '#007EE5'],
 };
 
 const getCategoryColor = (category: string): string => {
@@ -164,7 +190,231 @@ const getTimeOfDay = (): 'morning' | 'afternoon' | 'evening' | 'night' => {
   return 'night';
 };
 
-// Custom Marker Component for Places - Modern design with fade animation
+// Custom map style to completely hide Google POIs and ensure only our markers show
+const customMapStyle = [
+  {
+    featureType: 'poi',
+    elementType: 'all',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi.business',
+    elementType: 'all',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi.attraction',
+    elementType: 'all',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'transit',
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+];
+
+// Clustering utility - groups nearby markers based on map zoom level
+interface MarkerCluster {
+  id: string;
+  coordinate: { latitude: number; longitude: number };
+  items: SearchResultItem[];
+  dominantCategory: string;
+}
+
+const calculateZoomLevel = (latitudeDelta: number): number => {
+  // Approximate zoom level from latitude delta
+  return Math.round(Math.log(360 / latitudeDelta) / Math.LN2);
+};
+
+const clusterMarkers = (
+  markers: SearchResultItem[],
+  mapRegion: Region
+): { clusters: MarkerCluster[]; singles: SearchResultItem[] } => {
+  const zoomLevel = calculateZoomLevel(mapRegion.latitudeDelta);
+  
+  // No clustering at high zoom (streets level)
+  if (zoomLevel >= 14) {
+    return { clusters: [], singles: markers };
+  }
+  
+  // Calculate clustering radius based on zoom (more zoom = less clustering)
+  const clusterRadiusKm = zoomLevel >= 12 ? 0.5 : zoomLevel >= 10 ? 1.5 : 3.0;
+  
+  const clusters: MarkerCluster[] = [];
+  const clustered = new Set<string>();
+  
+  for (const marker of markers) {
+    if (clustered.has(marker.id)) continue;
+    
+    // Find nearby markers within radius
+    const nearby = markers.filter(other => {
+      if (other.id === marker.id || clustered.has(other.id)) return false;
+      
+      const distance = calculateDistance(
+        marker.location.latitude,
+        marker.location.longitude,
+        other.location.latitude,
+        other.location.longitude
+      );
+      
+      return distance <= clusterRadiusKm;
+    });
+    
+    // Create cluster if enough markers nearby (min 2)
+    if (nearby.length >= 1) {
+      const clusterItems = [marker, ...nearby];
+      
+      // Calculate centroid
+      const avgLat = clusterItems.reduce((sum, item) => sum + item.location.latitude, 0) / clusterItems.length;
+      const avgLng = clusterItems.reduce((sum, item) => sum + item.location.longitude, 0) / clusterItems.length;
+      
+      // Find dominant category
+      const categoryCounts = new Map<string, number>();
+      for (const item of clusterItems) {
+        const cat = item.category || 'default';
+        categoryCounts.set(cat, (categoryCounts.get(cat) || 0) + 1);
+      }
+      const dominantCategory = Array.from(categoryCounts.entries())
+        .sort((a, b) => b[1] - a[1])[0][0];
+      
+      clusters.push({
+        id: `cluster_${marker.id}`,
+        coordinate: { latitude: avgLat, longitude: avgLng },
+        items: clusterItems,
+        dominantCategory,
+      });
+      
+      // Mark all as clustered
+      clusterItems.forEach(item => clustered.add(item.id));
+    }
+  }
+  
+  // Singles are markers not in clusters
+  const singles = markers.filter(m => !clustered.has(m.id));
+  
+  return { clusters, singles };
+};
+
+// Calculate distance between two points (kilometers)
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+// Modern Cluster Marker Component - Shows count and dominant category
+const ClusterMarker = React.memo(({
+  cluster,
+  onPress,
+}: {
+  cluster: MarkerCluster;
+  onPress?: () => void;
+}) => {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.8)).current;
+  
+  useEffect(() => {
+    // Fade + scale in animation
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        tension: 45,
+        friction: 12,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+  
+  const [color1, color2] = categoryGradients[cluster.dominantCategory] || categoryGradients.default;
+  const count = cluster.items.length;
+  
+  // Size based on count (2-5: small, 6-10: medium, 11+: large)
+  const size = count <= 5 ? 48 : count <= 10 ? 56 : 64;
+  const fontSize = count <= 5 ? 16 : count <= 10 ? 18 : 20;
+  
+  return (
+    <Marker
+      coordinate={cluster.coordinate}
+      onPress={onPress}
+      opacity={1}
+    >
+      <Animated.View style={{ opacity, transform: [{ scale }] }} className="items-center">
+        {/* Modern gradient pill cluster */}
+        <View
+          className="rounded-full items-center justify-center"
+          style={{
+            backgroundColor: color1,
+            width: size,
+            height: size,
+            shadowColor: color1,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            elevation: 6,
+          }}
+        >
+          {/* Inner circle for depth */}
+          <View
+            className="absolute inset-1 rounded-full"
+            style={{
+              backgroundColor: color2,
+              opacity: 0.4,
+            }}
+          />
+          
+          {/* Count */}
+          <Text
+            className="font-bold text-white"
+            style={{
+              fontSize,
+              textShadowColor: 'rgba(0,0,0,0.3)',
+              textShadowOffset: { width: 0, height: 1 },
+              textShadowRadius: 2,
+            }}
+          >
+            {count}
+          </Text>
+        </View>
+        
+        {/* Pointer/pin effect */}
+        <View
+          className="w-0 h-0 -mt-0.5"
+          style={{
+            borderLeftWidth: 7,
+            borderRightWidth: 7,
+            borderTopWidth: 10,
+            borderLeftColor: 'transparent',
+            borderRightColor: 'transparent',
+            borderTopColor: color1,
+          }}
+        />
+      </Animated.View>
+    </Marker>
+  );
+});
+
+ClusterMarker.displayName = 'ClusterMarker';
+
+// Custom Marker Component for Places - Enhanced with unique colors
 const CustomMarker = ({
   place,
   onPress,
@@ -175,15 +425,26 @@ const CustomMarker = ({
   isActive?: boolean;
 }) => {
   const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
-    // Fade in animation on mount (Google Maps style)
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    // Fade + scale in animation (modern feel)
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        tension: 50,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
+  
+  const markerColor = getCategoryColor(place.category || 'default');
 
   return (
     <Marker
@@ -192,28 +453,43 @@ const CustomMarker = ({
         longitude: place.location.longitude,
       }}
       onPress={onPress}
-      opacity={1} // Marker itself stays opaque for hitbox
+      opacity={1}
     >
-      <Animated.View style={{ opacity }} className="items-center">
+      <Animated.View style={{ opacity, transform: [{ scale }] }} className="items-center">
         <View
           className="rounded-full items-center justify-center"
           style={{
-            backgroundColor: getCategoryColor(place.category || 'default'),
-            width: isActive ? 40 : 36,
-            height: isActive ? 40 : 36,
+            backgroundColor: markerColor,
+            width: isActive ? 44 : 38,
+            height: isActive ? 44 : 38,
+            shadowColor: markerColor,
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: isActive ? 0.4 : 0.25,
+            shadowRadius: isActive ? 8 : 5,
+            elevation: isActive ? 8 : 4,
           }}
         >
-          <CategoryIcon category={place.category || 'default'} size={isActive ? 20 : 18} color="#FFFFFF" />
+          {/* Subtle inner glow for active */}
+          {isActive && (
+            <View
+              className="absolute inset-0.5 rounded-full"
+              style={{
+                backgroundColor: '#FFFFFF',
+                opacity: 0.2,
+              }}
+            />
+          )}
+          <CategoryIcon category={place.category || 'default'} size={isActive ? 22 : 19} color="#FFFFFF" />
         </View>
         <View
           className="w-0 h-0 -mt-0.5"
           style={{
-            borderLeftWidth: 6,
-            borderRightWidth: 6,
-            borderTopWidth: 8,
+            borderLeftWidth: isActive ? 7 : 6,
+            borderRightWidth: isActive ? 7 : 6,
+            borderTopWidth: isActive ? 10 : 8,
             borderLeftColor: 'transparent',
             borderRightColor: 'transparent',
-            borderTopColor: getCategoryColor(place.category || 'default'),
+            borderTopColor: markerColor,
           }}
         />
       </Animated.View>
@@ -221,7 +497,7 @@ const CustomMarker = ({
   );
 };
 
-// Event Marker Component - Modern design with fade animation
+// Event Marker Component - Enhanced with category-specific colors
 const EventMarker = ({
   event,
   onPress,
@@ -231,16 +507,25 @@ const EventMarker = ({
   onPress?: () => void;
   isActive?: boolean;
 }) => {
-  const eventColor = getCategoryColor('event');
+  const eventColor = getCategoryColor(event.category || 'event');
   const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
-    // Fade in animation on mount (Google Maps style)
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    // Fade + scale in animation (modern feel)
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        tension: 50,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
   }, []);
 
   return (
@@ -250,25 +535,41 @@ const EventMarker = ({
         longitude: event.location.longitude,
       }}
       onPress={onPress}
-      opacity={1} // Marker itself stays opaque for hitbox
+      opacity={1}
     >
-      <Animated.View style={{ opacity }} className="items-center">
+      <Animated.View style={{ opacity, transform: [{ scale }] }} className="items-center">
+        {/* Rounded square for events (differentiate from circular places) */}
         <View
-          className="rounded-xl items-center justify-center"
+          className="rounded-2xl items-center justify-center"
           style={{
             backgroundColor: eventColor,
-            width: isActive ? 40 : 36,
-            height: isActive ? 40 : 36,
+            width: isActive ? 44 : 38,
+            height: isActive ? 44 : 38,
+            shadowColor: eventColor,
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: isActive ? 0.4 : 0.25,
+            shadowRadius: isActive ? 8 : 5,
+            elevation: isActive ? 8 : 4,
           }}
         >
-          <Feather name="calendar" size={isActive ? 22 : 20} color="#FFFFFF" />
+          {/* Subtle inner glow for active */}
+          {isActive && (
+            <View
+              className="absolute inset-0.5 rounded-2xl"
+              style={{
+                backgroundColor: '#FFFFFF',
+                opacity: 0.2,
+              }}
+            />
+          )}
+          <CategoryIcon category={event.category || 'event'} size={isActive ? 23 : 20} color="#FFFFFF" />
         </View>
         <View
           className="w-0 h-0 -mt-0.5"
           style={{
-            borderLeftWidth: 6,
-            borderRightWidth: 6,
-            borderTopWidth: 8,
+            borderLeftWidth: isActive ? 7 : 6,
+            borderRightWidth: isActive ? 7 : 6,
+            borderTopWidth: isActive ? 10 : 8,
             borderLeftColor: 'transparent',
             borderRightColor: 'transparent',
             borderTopColor: eventColor,
@@ -312,6 +613,8 @@ const WhatsHappeningSheet = ({
   onDistanceChange,
   hasMoreResults,
   totalResults,
+  whatsHappeningFeed = [], // Independent feed data
+  isSearching = false, // Loading state
 }: {
   region: Region;
   visible: boolean;
@@ -341,7 +644,12 @@ const WhatsHappeningSheet = ({
   onDistanceChange?: (miles: number) => void;
   hasMoreResults?: boolean;
   totalResults?: number;
+  whatsHappeningFeed?: SearchResultItem[]; // Independent feed data
+  isSearching?: boolean; // Loading state for search
 }) => {
+  // Get safe area insets for proper alignment with LIVE DATA indicator
+  const insets = useSafeAreaInsets();
+  
   const [selectedDate, setSelectedDate] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState<Date | null>(null);
   const [currentEventIndex, setCurrentEventIndex] = useState(0);
@@ -401,11 +709,17 @@ const WhatsHappeningSheet = ({
   };
   
   // Refined snap points for smooth, natural feeling interactions
+  // SNAP_EXPANDED: Sheet must stay below search bar to prevent overlap
+  // Layout from top:
+  // - Status bar/notch: insets.top
+  // - LIVE DATA pill: insets.top + 12, height ~36px
+  // - Search bar: ~60px tall with padding (positioned at ~insets.top + 64)
+  // - Safe position for sheet: insets.top + 64 + 60 + 8 = insets.top + 132
   const SNAP_HIDDEN = SCREEN_HEIGHT; // Completely off-screen
   const SNAP_COLLAPSED = SCREEN_HEIGHT - 100; // Peek handle + hint of content
   const SNAP_PARTIAL = SCREEN_HEIGHT - 320; // Comfortable browsing height
   const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.30; // 70% expanded - optimal for details
-  const SNAP_EXPANDED = 100; // Fully expanded with breathing room
+  const SNAP_EXPANDED = Math.max(insets.top + 132, 132); // Below search bar with clearance
   
   // Consistent animation configuration (industry standard: tension 40-50, friction 10-14)
   const SPRING_CONFIG = {
@@ -494,8 +808,21 @@ const WhatsHappeningSheet = ({
     { 
       useNativeDriver: true,
       listener: ({ nativeEvent }: any) => {
+        // Block dragging if inner content is scrolling
         if (isInnerScrollActiveRef.current) {
           dragOffset.setValue(0);
+          return;
+        }
+        
+        // Clamp dragging to prevent going above SNAP_EXPANDED limit
+        const { translationY } = nativeEvent;
+        const currentY = (translateY as any).__getValue();
+        const projectedY = currentY + translationY;
+        
+        // If would go above limit, clamp to limit
+        if (projectedY < SNAP_EXPANDED) {
+          const maxTranslation = SNAP_EXPANDED - currentY;
+          dragOffset.setValue(maxTranslation);
         }
       }
     }
@@ -537,17 +864,27 @@ const WhatsHappeningSheet = ({
       
       let targetSnap = SNAP_PARTIAL;
       
-      // Refined velocity thresholds for more natural feeling
+      // Refined velocity and two-step collapse behavior
+      // Prevents accidental full collapse - must go through COLLAPSED first
+      
+      // Fast swipe down
       if (velocityY > 1000) {
-        targetSnap = SNAP_HIDDEN;
+        // From expanded/three-quarter/partial → Catch at collapsed (don't hide directly)
+        if (currentY < SNAP_PARTIAL) {
+          targetSnap = SNAP_COLLAPSED; // Two-step: catch at bottom first
+        } else if (currentY >= SNAP_COLLAPSED - 50) {
+          targetSnap = SNAP_HIDDEN; // Already at bottom, now hide
+        } else {
+          targetSnap = SNAP_COLLAPSED;
+        }
       } else if (velocityY > 600) {
-        targetSnap = SNAP_COLLAPSED;
+        targetSnap = SNAP_COLLAPSED; // Medium swipe down
       } else if (velocityY < -1000) {
-        targetSnap = SNAP_EXPANDED;
+        targetSnap = SNAP_EXPANDED; // Fast swipe up
       } else if (velocityY < -600) {
-        targetSnap = SNAP_THREE_QUARTER;
+        targetSnap = SNAP_THREE_QUARTER; // Medium swipe up
       } else {
-        // Snap to nearest position
+        // Slow drag - snap to nearest position
         const distances = [
           Math.abs(finalY - SNAP_EXPANDED),
           Math.abs(finalY - SNAP_THREE_QUARTER),
@@ -557,6 +894,11 @@ const WhatsHappeningSheet = ({
         ];
         const minIndex = distances.indexOf(Math.min(...distances));
         targetSnap = [SNAP_EXPANDED, SNAP_THREE_QUARTER, SNAP_PARTIAL, SNAP_COLLAPSED, SNAP_HIDDEN][minIndex];
+        
+        // Two-step collapse: If trying to snap to HIDDEN from upper positions, catch at COLLAPSED first
+        if (targetSnap === SNAP_HIDDEN && currentY < SNAP_COLLAPSED - 100) {
+          targetSnap = SNAP_COLLAPSED; // Catch at collapsed first
+        }
       }
       
       // Animate to target position with haptic feedback
@@ -647,8 +989,12 @@ const WhatsHappeningSheet = ({
   const filteredEvents = useMemo(() => [], [selectedDate, customDate]);
   const nearbyPlaces = useMemo(() => [], []);
 
+  // Image URL resolver - Uses Google Places Photos for places, Ticketmaster for events
   const getImageUrl = useCallback(
     (item: SearchResultItem): string | undefined => {
+      // Use photo resolution function which handles:
+      // - Places: photoName → /api/place-photo proxy (Google Places Photos)
+      // - Events: imageUrl directly (Ticketmaster photos)
       return resolveImageUrl?.(item) ?? item.imageUrl;
     },
     [resolveImageUrl],
@@ -656,8 +1002,10 @@ const WhatsHappeningSheet = ({
 
   // Render What's Happening Default View
   const renderWhatsHappening = () => {
-    const nearbyEvents = searchResults?.filter(r => r.type === 'event') || [];
-    const nearbyPlaces = searchResults?.filter(r => r.type === 'place') || [];
+    // Use dedicated feed data (independent from map markers and search results)
+    const feedData = whatsHappeningFeed || [];
+    const nearbyEvents = feedData.filter(r => r.type === 'event');
+    const nearbyPlaces = feedData.filter(r => r.type === 'place');
     
     return (
       <>
@@ -718,11 +1066,24 @@ const WhatsHappeningSheet = ({
                     style={{ width: 280, height: 180 }}
                   >
                     <View className="relative rounded-2xl overflow-hidden">
-                      <Image
-                        source={{ uri: getImageUrl(event) || 'https://via.placeholder.com/280x180' }}
-                        style={{ width: 280, height: 180 }}
-                        contentFit="cover"
-                      />
+                      {(() => {
+                        const photoUrl = getImageUrl(event);
+                        return photoUrl ? (
+                          <Image
+                            key={`${event.id}-${photoUrl}`}
+                            source={{ uri: photoUrl }}
+                            style={{ width: 280, height: 180 }}
+                            contentFit="cover"
+                            cachePolicy="none"
+                            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                            transition={200}
+                          />
+                        ) : (
+                          <View className="bg-gray-800 items-center justify-center" style={{ width: 280, height: 180 }}>
+                            <Icon name="calendar" size={48} color="#FFFFFF" />
+                          </View>
+                        );
+                      })()}
                       {/* Gradient overlay for text readability */}
                       <View 
                         style={{
@@ -808,11 +1169,25 @@ const WhatsHappeningSheet = ({
                     style={{ width: 240, height: 160 }}
                   >
                     <View className="relative rounded-2xl overflow-hidden">
-                      <Image
-                        source={{ uri: getImageUrl(place) || 'https://via.placeholder.com/240x160' }}
-                        style={{ width: 240, height: 160 }}
-                        contentFit="cover"
-                      />
+                      {(() => {
+                        const photoUrl = getImageUrl(place);
+                        // Force placeholder for icon URLs (don't show icons)
+                        return (!photoUrl || isLikelyGoogleIconUrl(place.imageUrl)) ? (
+                          <View className="bg-gray-200 items-center justify-center" style={{ width: 240, height: 160 }}>
+                            <Icon name="image" size={48} color="#9CA3AF" />
+                          </View>
+                        ) : (
+                          <Image
+                            key={`${place.id}-${photoUrl}`}
+                            source={{ uri: photoUrl }}
+                            style={{ width: 240, height: 160 }}
+                            contentFit="cover"
+                            cachePolicy="none"
+                            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                            transition={200}
+                          />
+                        );
+                      })()}
                       {/* Gradient overlay */}
                       <View 
                         style={{
@@ -1301,6 +1676,17 @@ const WhatsHappeningSheet = ({
 
   // Render Unified Results (supports incremental "infinite" scroll)
   const renderSearchResults = () => {
+    // Show loading indicator while searching (professional, minimal)
+    if (isSearching && (!searchResults || searchResults.length === 0)) {
+      return (
+        <View className="flex-1 items-center justify-center px-6">
+          {/* Modern loading spinner */}
+          <ActivityIndicator size="large" color="#007EE5" />
+          <Text className="text-sm text-gray-500 mt-4">Finding the best spots...</Text>
+        </View>
+      );
+    }
+    
     const all = searchResults ?? [];
     const limit = typeof searchDisplayCount === 'number' ? searchDisplayCount : all.length;
     const shown = all.slice(0, Math.max(0, limit));
@@ -1704,8 +2090,13 @@ export const MapScreen = () => {
   const [currentOffset, setCurrentOffset] = useState(0);
   const currentSearchQueryRef = useRef('');
   
-  // Distance filter state (lifted from WhatsHappeningSheet for API integration)
+  // Distance filter state (controls What's Happening feed radius)
   const [distanceMiles, setDistanceMiles] = useState(10);
+  
+  // Separate state for What's Happening feed (independent from map markers)
+  const [whatsHappeningFeed, setWhatsHappeningFeed] = useState<SearchResultItem[]>([]);
+  const [isFeedLoading, setIsFeedLoading] = useState(false);
+  const lastFeedLoadRef = useRef<{ lat: number; lng: number; radius: number } | null>(null);
   
   // Search context preservation - never lose user's results on navigation
   const [lastSearchQuery, setLastSearchQuery] = useState('');
@@ -1767,17 +2158,28 @@ export const MapScreen = () => {
 
   const resolveResultImageUrl = useCallback(
     (item: SearchResultItem): string | undefined => {
-      // Prefer real photos for places when available.
+      // PLACES: Use Google Places Photos API (high-quality venue photos)
       if (item.type === 'place') {
         const photoName = item.photoName || photoNameOverrideById[item.id];
+        
         if (photoName && API_BASE_URL) {
           const name = encodeURIComponent(photoName);
-          return `${API_BASE_URL}/api/place-photo?name=${name}&maxWidthPx=800&maxHeightPx=800`;
+          const photoUrl = `${API_BASE_URL}/api/place-photo?name=${name}&maxWidthPx=800&maxHeightPx=800`;
+          console.log(`[Photo] Using Google Places photo for: ${item.title}`);
+          return photoUrl;
         }
+        
+        // No photoName - check if imageUrl is a Google icon (filter it out)
+        if (item.imageUrl && isLikelyGoogleIconUrl(item.imageUrl)) {
+          console.log(`[Photo] Icon URL blocked for ${item.title}: ${item.imageUrl.substring(0, 60)}...`);
+          return undefined; // Return undefined to trigger placeholder
+        }
+        
+        // Only return imageUrl if it's not an icon
         return item.imageUrl;
       }
 
-      // Events: use provided imageUrl.
+      // EVENTS: Use Ticketmaster photos (already high-quality)
       return item.imageUrl;
     },
     [photoNameOverrideById],
@@ -1873,10 +2275,12 @@ export const MapScreen = () => {
   
   // Snap points for reference (matching WhatsHappeningSheet)
   const SNAP_HIDDEN = SCREEN_HEIGHT;
-  const SNAP_COLLAPSED = SCREEN_HEIGHT - 80;
-  const SNAP_PARTIAL = SCREEN_HEIGHT - 220;
-  const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.25;
-  const SNAP_EXPANDED = 120;
+  // Snap points for sheet positioning (must match WhatsHappeningSheet component)
+  // SNAP_EXPANDED: Sheet must stay below search bar (never overlap)
+  const SNAP_COLLAPSED = SCREEN_HEIGHT - 100;
+  const SNAP_PARTIAL = SCREEN_HEIGHT - 320;
+  const SNAP_THREE_QUARTER = SCREEN_HEIGHT * 0.30;
+  const SNAP_EXPANDED = Math.max(insets.top + 132, 132); // Below search bar with safe clearance
   
   // Map dimming for visual hierarchy when sheet is expanded
   const mapDimOpacity = useMemo(() => {
@@ -2037,8 +2441,8 @@ export const MapScreen = () => {
           };
           applyRegion(newRegion, { animateMs: 800, remountMapOnce: true });
           
-          // Load initial "What's Happening" data in background
-          await runSearch('', location.coords.latitude, location.coords.longitude);
+          // Load initial "What's Happening" feed data
+          await loadWhatsHappeningFeed(location.coords.latitude, location.coords.longitude, distanceMiles);
         } catch (error) {
           console.error('Error getting location:', error);
         }
@@ -2278,10 +2682,25 @@ export const MapScreen = () => {
     setIsSearching(true);
     try {
       const parsed = classifyQuery(q);
-      let centerLat = region.latitude;
-      let centerLng = region.longitude;
-
-      if (parsed.type === 'location' || parsed.type === 'hybrid') {
+      
+      // Determine search center based on query type
+      let centerLat: number;
+      let centerLng: number;
+      let shouldAnimateMap = false;
+      
+      // "near me" or similar proximity queries use USER'S ACTUAL LOCATION
+      const isProximityQuery = q.toLowerCase().match(/\b(near me|nearby|around here|close to me|in my area)\b/i);
+      
+      if (isProximityQuery && userLocation) {
+        // Use user's GPS location (Napa), not map center (San Jose)
+        centerLat = userLocation.coords.latitude;
+        centerLng = userLocation.coords.longitude;
+        console.log(`[Search] "near me" detected - using user location: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}`);
+        
+        // Animate map to user's location for context
+        shouldAnimateMap = true;
+      } else if (parsed.type === 'location' || parsed.type === 'hybrid') {
+        // Explicit location query ("bars in SF")
         const locationQuery = parsed.location || q;
         const newRegion = await geocodeAddress(locationQuery);
 
@@ -2290,6 +2709,7 @@ export const MapScreen = () => {
           centerLng = newRegion.longitude;
           setRegion(newRegion);
           mapRef.current?.animateToRegion(newRegion, 1000);
+          console.log(`[Search] Location query - geocoded to: ${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}`);
         } else if (parsed.type === 'location') {
           Alert.alert(
             'Location not found',
@@ -2297,7 +2717,28 @@ export const MapScreen = () => {
             [{ text: 'OK' }],
           );
           return;
+        } else {
+          // Hybrid but geocoding failed - use user location
+          centerLat = userLocation?.coords.latitude ?? region.latitude;
+          centerLng = userLocation?.coords.longitude ?? region.longitude;
         }
+      } else {
+        // General search - use user location if available, otherwise map center
+        centerLat = userLocation?.coords.latitude ?? region.latitude;
+        centerLng = userLocation?.coords.longitude ?? region.longitude;
+        console.log(`[Search] General query - using ${userLocation ? 'user location' : 'map center'}`);
+      }
+      
+      // Animate map to search center if proximity query
+      if (shouldAnimateMap) {
+        const searchRegion = {
+          latitude: centerLat,
+          longitude: centerLng,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        };
+        setRegion(searchRegion);
+        mapRef.current?.animateToRegion(searchRegion, 800);
       }
 
       await runSearch(q, centerLat, centerLng);
@@ -2317,12 +2758,70 @@ export const MapScreen = () => {
     }
   };
 
+  // Dedicated function to load What's Happening feed (independent from map/search)
+  const loadWhatsHappeningFeed = useCallback(async (
+    centerLat: number,
+    centerLng: number,
+    radiusMiles: number
+  ) => {
+    // Skip if same location and radius as last load (prevent redundant calls)
+    const last = lastFeedLoadRef.current;
+    if (last &&
+        Math.abs(last.lat - centerLat) < 0.001 &&
+        Math.abs(last.lng - centerLng) < 0.001 &&
+        last.radius === radiusMiles) {
+      console.log('[What\'s Happening Feed] Skipped: same location and radius');
+      return;
+    }
+    
+    console.log(`[What's Happening Feed] Loading with ${radiusMiles}mi radius`);
+    lastFeedLoadRef.current = { lat: centerLat, lng: centerLng, radius: radiusMiles };
+    
+    try {
+      setIsFeedLoading(true);
+      
+      // Call API specifically for feed (empty query = "What's Happening")
+      const response = await searchService.search({
+        query: '', // Empty query for general discovery
+        userContext: {
+          currentLocation: { latitude: centerLat, longitude: centerLng },
+          timezone: Intl?.DateTimeFormat?.().resolvedOptions?.().timeZone || 'UTC',
+          nowISO: new Date().toISOString(),
+        },
+        radiusMiles,
+        limit: 40, // Get more for horizontal scrolls
+        offset: 0,
+      });
+      
+      if (response?.results) {
+        setWhatsHappeningFeed(response.results);
+        console.log(`[What's Happening Feed] ✅ Loaded ${response.results.length} results`);
+      }
+    } catch (error) {
+      console.error('[What\'s Happening Feed] Failed to load:', error);
+    } finally {
+      setIsFeedLoading(false);
+    }
+  }, []);
+
   const handleDistanceChange = (miles: number) => {
     setDistanceMiles(miles);
     
-    // Trigger new search with updated radius (maintains current query and location)
-    const q = currentSearchQueryRef.current || searchQuery.trim();
-    if (q || isSearchMode) {
+    console.log(`[Distance Filter] Changed to ${miles} miles`);
+    
+    // Get user's actual location (not map center)
+    const userLat = userLocation?.coords.latitude ?? region.latitude;
+    const userLng = userLocation?.coords.longitude ?? region.longitude;
+    
+    // Refresh What's Happening feed with new radius FROM USER'S LOCATION
+    if (!isSearchMode) {
+      console.log(`[Distance Filter] Refreshing feed from user location: ${userLat.toFixed(4)}, ${userLng.toFixed(4)}`);
+      void loadWhatsHappeningFeed(userLat, userLng, miles);
+    }
+    
+    // If in search mode, search uses map center (current viewport)
+    if (isSearchMode) {
+      const q = currentSearchQueryRef.current || searchQuery.trim();
       void runSearch(q, region.latitude, region.longitude, { radiusMiles: miles });
     }
   };
@@ -2358,8 +2857,10 @@ export const MapScreen = () => {
     setSheetAnimationKey((k) => k + 1);
     setCurrentOffset(0);
     setHasMoreResults(false);
-    // Refresh What's Happening with current location
-    void runSearch('', region.latitude, region.longitude);
+    // Refresh What's Happening feed with USER'S location (not map center)
+    const userLat = userLocation?.coords.latitude ?? region.latitude;
+    const userLng = userLocation?.coords.longitude ?? region.longitude;
+    void loadWhatsHappeningFeed(userLat, userLng, distanceMiles);
   };
 
   const loadMoreSearchResults = async () => {
@@ -2709,54 +3210,71 @@ export const MapScreen = () => {
     }
   };
 
-  // Smart What's Happening refresh (ONLY in true browse mode)
-  // CRITICAL: Extremely conservative - never disrupts user's search experience
+  // Dynamic Viewport Refresh - Google Maps style real-time marker updates
+  // Refreshes markers as user pans/zooms to show relevant results for current viewport
   useEffect(() => {
-    // STRICT CONDITIONS: Never run while:
-    // 1. User has search results (preserve their search)
-    // 2. User is in search mode (browsing results)
-    // 3. User is viewing details (don't disrupt)
-    // 4. Search input is focused (typing)
-    // 5. User has typed a query (even if not submitted)
-    if (
-      results.length > 0 ||
-      isSearchMode ||
-      selectedItemForDetail ||
-      isSearchInputFocused ||
-      searchQuery.trim().length > 0
-    ) {
-      return;
+    // Only skip when viewing detail modal (focused interaction)
+    if (selectedItemForDetail) {
+      return; // Skip silently
     }
 
     let isMounted = true;
     let timeoutId: NodeJS.Timeout;
 
     const last = lastSearchRegionRef.current;
-    // Higher threshold: only refresh if user moved significantly (>0.5 miles)
+    
+    // Calculate zoom-adaptive thresholds
+    const isStreetLevel = region.latitudeDelta < 0.01;
+    const isNeighborhoodLevel = region.latitudeDelta < 0.05;
+    
+    // Tighter thresholds when zoomed in for responsive feel
+    const movementThreshold = isStreetLevel ? 0.002 : isNeighborhoodLevel ? 0.004 : 0.008;
+    const zoomThreshold = 0.015;
+    
+    const latDiff = last ? Math.abs(last.latitude - region.latitude) : 999;
+    const lngDiff = last ? Math.abs(last.longitude - region.longitude) : 999;
+    const zoomDiff = last ? Math.abs(last.latitudeDelta - region.latitudeDelta) : 999;
+    
     const movedEnough =
       !last ||
-      Math.abs(last.latitude - region.latitude) > 0.008 || // ~0.5 miles (was 0.002)
-      Math.abs(last.longitude - region.longitude) > 0.008 ||
-      Math.abs(last.latitudeDelta - region.latitudeDelta) > 0.03; // Zoom change (was 0.01)
+      latDiff > movementThreshold ||
+      lngDiff > movementThreshold ||
+      zoomDiff > zoomThreshold;
 
-    if (!movedEnough) return;
+    if (!movedEnough) {
+      return; // Skip silently - no need to log every non-movement
+    }
+    
+    // Update last region to prevent duplicate triggers
     lastSearchRegionRef.current = region;
+    
+    console.log('[Dynamic Viewport] Movement detected, will refresh in', isSearchInputFocused ? 1500 : 500, 'ms');
 
-    // Long debounce: wait for user to settle (1.5s)
+    // Debounce: 500ms standard, 1500ms if typing in search
+    const debounceMs = isSearchInputFocused ? 1500 : 500;
+
     timeoutId = setTimeout(async () => {
       if (!isMounted) return;
+
+      const currentQuery = isSearchMode ? (currentSearchQueryRef.current || searchQuery.trim()) : '';
       
-      // Final safety check: user hasn't started action in meantime
-      if (isSearchMode || results.length > 0 || searchQuery.trim().length > 0) return;
+      console.log(`[Dynamic Viewport] 🔄 Refreshing markers for viewport: lat=${region.latitude.toFixed(4)}, lng=${region.longitude.toFixed(4)}, zoom=${region.latitudeDelta.toFixed(4)}, query="${currentQuery}"`);
       
       try {
         setIsLoadingRemote(true);
-        // Browse mode only: refresh What's Happening for new area
-        await runSearch('', region.latitude, region.longitude);
+        
+        // Always use forceRefresh: true to bypass cache and get fresh results for new viewport
+        await runSearch(currentQuery, region.latitude, region.longitude, { 
+          forceRefresh: true // Force fresh API call for new geographic area
+        });
+        
+        console.log('[Dynamic Viewport] ✅ Refresh complete');
+      } catch (error) {
+        console.error('[Dynamic Viewport] ❌ Refresh failed:', error);
       } finally {
         if (isMounted) setIsLoadingRemote(false);
       }
-    }, 1500); // Increased from 500ms to 1500ms
+    }, debounceMs);
     
     return () => {
       isMounted = false;
@@ -2771,7 +3289,6 @@ export const MapScreen = () => {
     region.longitudeDelta,
     searchQuery,
     selectedItemForDetail,
-    results.length, // Added: prevent refresh when results exist
   ]);
 
   // Generate location-aware mock data based on user's actual location
@@ -2933,33 +3450,87 @@ export const MapScreen = () => {
           showsMyLocationButton={false}
           showsPointsOfInterest={false}
           showsBuildings={false}
+          showsIndoors={false}
+          showsIndoorLevelPicker={false}
+          showsCompass={false}
+          showsScale={false}
+          showsTraffic={false}
+          toolbarEnabled={false}
           mapType="standard"
+          customMapStyle={customMapStyle}
           scrollEnabled={true}
           zoomEnabled={true}
           pitchEnabled={true}
           rotateEnabled={true}
+          minZoomLevel={3}
+          maxZoomLevel={20}
         >
-          {visibleResults
-            .filter((r) => r.type === 'place')
-            .map((place) => (
-            <CustomMarker
-              key={place.id}
-              place={place}
-              isActive={activePlaceId === place.id}
-              onPress={() => handleMarkerPress(place)}
-            />
-          ))}
-          
-          {visibleResults
-            .filter((r) => r.type === 'event')
-            .map((event) => (
-              <EventMarker
-                key={event.id}
-                event={event}
-                isActive={activeEventId === event.id}
-                onPress={() => handleMarkerPress(event)}
-            />
-          ))}
+          {(() => {
+            // Apply modern clustering for better UX at different zoom levels
+            const { clusters, singles } = clusterMarkers(visibleResults, region);
+            
+            return (
+              <>
+                {/* Render cluster markers */}
+                {clusters.map((cluster) => (
+                  <ClusterMarker
+                    key={cluster.id}
+                    cluster={cluster}
+                    onPress={() => {
+                      // Zoom to fit all markers in cluster with smooth animation
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                      
+                      // Calculate bounds for all markers in cluster
+                      const lats = cluster.items.map(item => item.location.latitude);
+                      const lngs = cluster.items.map(item => item.location.longitude);
+                      const minLat = Math.min(...lats);
+                      const maxLat = Math.max(...lats);
+                      const minLng = Math.min(...lngs);
+                      const maxLng = Math.max(...lngs);
+                      
+                      // Add padding
+                      const latPadding = (maxLat - minLat) * 0.3 || 0.01;
+                      const lngPadding = (maxLng - minLng) * 0.3 || 0.01;
+                      
+                      // Animate to show all markers in cluster
+                      const newRegion = {
+                        latitude: (minLat + maxLat) / 2,
+                        longitude: (minLng + maxLng) / 2,
+                        latitudeDelta: (maxLat - minLat) + latPadding,
+                        longitudeDelta: (maxLng - minLng) + lngPadding,
+                      };
+                      
+                      mapRef.current?.animateToRegion(newRegion, 800);
+                    }}
+                  />
+                ))}
+                
+                {/* Render individual place markers */}
+                {singles
+                  .filter((r) => r.type === 'place')
+                  .map((place) => (
+                    <CustomMarker
+                      key={place.id}
+                      place={place}
+                      isActive={activePlaceId === place.id}
+                      onPress={() => handleMarkerPress(place)}
+                    />
+                  ))}
+                
+                {/* Render individual event markers */}
+                {singles
+                  .filter((r) => r.type === 'event')
+                  .map((event) => (
+                    <EventMarker
+                      key={event.id}
+                      event={event}
+                      isActive={activeEventId === event.id}
+                      onPress={() => handleMarkerPress(event)}
+                    />
+                  ))}
+              </>
+            );
+          })()}
         </MapView>
 
         {/* Subtle map dimming when sheet is expanded - creates visual hierarchy */}
@@ -3132,6 +3703,7 @@ export const MapScreen = () => {
         onBackFromDetail={handleBackFromDetail}
         onResultPress={handleSearchResultPress}
         onWhatsHappeningPress={handleWhatsHappeningResultPress}
+        whatsHappeningFeed={whatsHappeningFeed}
         onSelectItem={handleSelectItem}
         onOpenEventVenue={handleOpenEventVenue}
         searchDisplayCount={isSearchMode ? searchDisplayCount : undefined}
@@ -3144,6 +3716,7 @@ export const MapScreen = () => {
         targetPosition={sheetTargetPosition}
         animationKey={sheetAnimationKey}
         isSearchMode={isSearchMode}
+        isSearching={isSearching}
         resolveImageUrl={resolveResultImageUrl}
         hasManuallyDraggedDuringSearchRef={hasManuallyDraggedDuringSearchRef}
         distanceMiles={distanceMiles}

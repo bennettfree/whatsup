@@ -126,14 +126,20 @@ export async function fetchTicketmasterEventsNearby(params: {
   const radius = clampInt(params.radiusMiles, 1, 100);
   const size = clampInt(params.maxResults, 1, 50);
 
+  // Use geoPoint (recommended) with latlong fallback for compatibility
+  const geoHash = `${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+  
   const requestParams: Record<string, string | number> = {
     apikey: apiKey,
-    latlong: `${latitude},${longitude}`,
+    geoPoint: geoHash, // Preferred parameter (not deprecated)
+    latlong: `${latitude},${longitude}`, // Keep for backward compatibility
     radius,
     unit: 'miles',
     size,
     page: 0,
-    sort: 'date,asc',
+    sort: 'date,asc', // Sort by date ascending (soonest first)
+    locale: 'en-US', // Language preference
+    preferredCountry: 'us', // Popularity boost for US
   };
 
   if (params.dateRange?.start) requestParams.startDateTime = params.dateRange.start;

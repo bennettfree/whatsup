@@ -69,6 +69,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Clear OpenAI cache (for testing/debugging)
+app.post('/api/clear-ai-cache', async (req, res) => {
+  try {
+    const { clearOpenAICache } = await import('./search/ai/openaiClient');
+    clearOpenAICache();
+    res.json({ success: true, message: 'OpenAI cache cleared' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to clear cache' });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   console.log('❌ 404:', req.method, req.path);
@@ -80,11 +91,21 @@ const PORT = process.env.PORT || 4000;
 // Bind to all interfaces so other devices on the LAN can reach the API.
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.listen(Number(PORT), HOST, () => {
+app.listen(Number(PORT), HOST, async () => {
   console.log(`\n🚀 API server listening on port ${PORT}`);
   console.log(`📍 Google Places API: ${process.env.GOOGLE_PLACES_API_KEY ? 'Configured ✓' : '❌ Missing'}`);
   console.log(`🎫 Ticketmaster API: ${process.env.TICKETMASTER_API_KEY ? 'Configured ✓' : '❌ Missing'}`);
   console.log(`🤖 OpenAI API: ${process.env.OPENAI_API_KEY ? 'Configured ✓' : '❌ Missing'}`);
+  console.log(`🔬 Hybrid OpenAI System: ${process.env.ENABLE_HYBRID_OPENAI !== 'false' ? 'ENABLED ✓' : 'DISABLED'}`);
+  
+  // Clear OpenAI cache on startup to ensure fresh classifications with updated prompts
+  try {
+    const { clearOpenAICache } = await import('./search/ai/openaiClient');
+    clearOpenAICache();
+    console.log(`🧹 OpenAI cache cleared (fresh start)`);
+  } catch (error) {
+    // Ignore if module not found
+  }
   console.log(`\n📡 Endpoints:`);
   console.log(`   GET  http://localhost:${PORT}/api/health`);
   console.log(`   GET  http://localhost:${PORT}/api/places`);

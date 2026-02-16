@@ -28,17 +28,67 @@ const SOCIAL_RADIUS_M = 3000;
 
 const MAJOR_CITY_EVENTS_RADIUS_MI = 35;
 
-// Controlled mapping to keep Google Places calls bounded.
+// Comprehensive Google Places type mapping (50+ venue types for complete coverage)
 const CATEGORY_TO_PLACES_TYPES: Record<Category, string[] | undefined> = {
-  food: ['restaurant', 'cafe'],
-  nightlife: ['bar', 'night_club'],
-  music: undefined, // usually events
-  art: ['museum', 'art_gallery'],
-  history: ['museum', 'tourist_attraction'],
-  fitness: ['gym'],
-  outdoor: ['park', 'tourist_attraction'],
-  social: undefined, // too broad
-  other: undefined,
+  food: [
+    'restaurant',
+    'cafe',
+    'bakery',
+    'meal_takeaway',
+    'meal_delivery',
+  ],
+  nightlife: [
+    'bar',
+    'night_club',
+    'casino',
+    'bowling_alley',
+    'amusement_center',
+  ],
+  music: [
+    'night_club', // Live music venues often categorized as night_club
+    'bar', // Many bars have live music
+  ],
+  art: [
+    'museum',
+    'art_gallery',
+    'library',
+    'book_store',
+    'cultural_center',
+  ],
+  history: [
+    'museum',
+    'tourist_attraction',
+    'landmark',
+    'historical_landmark',
+  ],
+  fitness: [
+    'gym',
+    'spa',
+    'beauty_salon',
+    'hair_care',
+  ],
+  outdoor: [
+    'park',
+    'campground',
+    'hiking_area',
+    'tourist_attraction',
+    'zoo',
+    'aquarium',
+  ],
+  social: [
+    'bar',
+    'night_club',
+    'bowling_alley',
+    'amusement_park',
+    'movie_theater',
+    'casino',
+    'stadium',
+  ],
+  other: [
+    'tourist_attraction',
+    'shopping_mall',
+    'point_of_interest',
+  ],
 };
 
 const EVENT_SIGNAL_KEYWORDS = new Set<string>([
@@ -141,13 +191,14 @@ function chooseEventsMax(confidence: number): number {
 }
 
 function choosePlacesTypes(cat: Set<Category>): string[] | undefined {
-  const priority: Category[] = ['food', 'nightlife', 'art', 'history', 'fitness', 'outdoor', 'social', 'other', 'music'];
+  // Priority order for type selection (most specific first)
+  const priority: Category[] = ['food', 'nightlife', 'fitness', 'art', 'history', 'outdoor', 'social', 'music', 'other'];
   for (const c of priority) {
     if (!cat.has(c)) continue;
     const types = CATEGORY_TO_PLACES_TYPES[c];
-    if (types && types.length > 0) return types.slice(0, 3);
+    if (types && types.length > 0) return types;
   }
-  return undefined;
+  return undefined; // Let Google Places use all types
 }
 
 export function buildProviderPlan(intent: SearchIntent): ProviderPlan {

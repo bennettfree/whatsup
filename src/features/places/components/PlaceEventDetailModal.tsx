@@ -1,10 +1,23 @@
 import React, { useMemo } from 'react';
-import { Modal, View, Text, ScrollView, TouchableOpacity, Linking, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Modal, View, Text, ScrollView, TouchableOpacity, Linking, Platform, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Icon, iconColors } from '@/components/Icon';
 import { useSavedStore, type SavedEntity } from '@/stores/useSavedStore';
+import { API_BASE_URL } from '@/services/apiClient';
+
+// Helper to resolve place photo URL from photoName
+function resolvePhotoUrl(item: SavedEntity): string | undefined {
+  // For places with photoName, use photo proxy
+  if (item.type === 'place' && item.photoName && API_BASE_URL) {
+    const name = encodeURIComponent(item.photoName);
+    return `${API_BASE_URL}/api/place-photo?name=${name}&maxWidthPx=800&maxHeightPx=600`;
+  }
+  
+  // Fall back to imageUrl (events or places without photos)
+  return item.imageUrl;
+}
 
 type Props = {
   visible: boolean;
@@ -32,6 +45,8 @@ function priceLevelText(level?: number): string | null {
 }
 
 export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isSaved = useSavedStore((s) => (item ? s.isSaved(item.id) : false));
   const toggleSave = useSavedStore((s) => s.toggleSave);
   const thumbsUp = useSavedStore((s) => s.thumbsUp);
@@ -40,6 +55,9 @@ export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
   const myVote = useSavedStore((s) => (item ? (s.myVoteById[item.id] ?? 'none') : 'none'));
 
   const isPlace = item?.type === 'place';
+  
+  // Calculate maximum modal height: 90% of screen minus top safe area (status bar/notch)
+  const maxModalHeight = height * 0.9 - insets.top;
 
   const distanceText = useMemo(() => formatDistance(item?.distanceMeters), [item?.distanceMeters]);
   const eventDateTime = useMemo(() => formatEventDateTime(item?.startDate), [item?.startDate]);
@@ -74,10 +92,15 @@ export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
   }
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView className="flex-1 bg-white" edges={['top', 'bottom']}>
-        {/* Header */}
-        <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+      <View className="flex-1 justify-end bg-black/40">
+        <SafeAreaView 
+          className="bg-white" 
+          edges={['bottom']}
+          style={{ maxHeight: maxModalHeight }}
+        >
+          {/* Header */}
+          <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-100">
           <TouchableOpacity onPress={onClose} className="flex-row items-center">
             <Icon name="x" size={20} color={iconColors.active} />
             <Text className="ml-2 text-base font-semibold text-gray-900">Back</Text>
@@ -90,14 +113,23 @@ export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
         </View>
 
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-          {/* Hero */}
-          {item.imageUrl ? (
-            <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: 260 }} contentFit="cover" />
-          ) : (
-            <View className="w-full h-[260px] bg-gray-100 items-center justify-center">
-              <Icon name="image" size={32} color={iconColors.muted} />
-            </View>
-          )}
+          {/* Hero Image - Uses Google Places Photos when available */}
+          {(() => {
+            const photoUrl = resolvePhotoUrl(item);
+            return photoUrl ? (
+              <Image 
+                source={{ uri: photoUrl }} 
+                style={{ width: '100%', height: 260 }} 
+                contentFit="cover"
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                transition={200}
+              />
+            ) : (
+              <View className="w-full h-[260px] bg-gray-100 items-center justify-center">
+                <Icon name="image" size={32} color={iconColors.muted} />
+              </View>
+            );
+          })()}
 
           <View className="px-4 pt-4 pb-2">
             <Text className="text-2xl font-bold text-gray-900">{item.title}</Text>
@@ -282,7 +314,8 @@ export const PlaceEventDetailModal = ({ visible, item, onClose }: Props) => {
             </TouchableOpacity>
           </View>
         </View>
-      </SafeAreaView>
+        </SafeAreaView>
+      </View>
     </Modal>
   );
 };

@@ -124,6 +124,9 @@ export async function fetchGooglePlacesNearby(params: {
   types?: string[];
   // Optional keyword to improve relevance; keep short to reduce variability.
   keyword?: string;
+  // Optional filters (Google Places best practices)
+  minRating?: number;
+  isOpenNow?: boolean;
 }): Promise<Place[]> {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey || apiKey === 'your_key_here' || apiKey.length < 10) return [];
@@ -138,6 +141,7 @@ export async function fetchGooglePlacesNearby(params: {
     const type = params.types?.[0];
     const keyword = params.keyword?.trim();
 
+    // searchNearby request body - EXACT format per Google documentation
     const body: Record<string, any> = {
       locationRestriction: {
         circle: {
@@ -145,30 +149,48 @@ export async function fetchGooglePlacesNearby(params: {
           radius,
         },
       },
-      maxResultCount: max,
-      rankPreference: 'DISTANCE',
+      maxResultCount: Math.min(max, 20), // searchNearby max is 20
+      languageCode: 'en',
     };
 
-    if (type) body.includedTypes = [type];
-    if (keyword && keyword.length >= 3 && keyword.length <= 40) body.keyword = keyword;
+    // includedTypes (optional) - must be valid Place type
+    if (type) {
+      body.includedTypes = [type];
+    }
+    
+    // rankPreference (optional) - POPULARITY or DISTANCE
+    body.rankPreference = 'DISTANCE';
 
+    console.log('[Google Places] Calling Places API (New) with body:', JSON.stringify(body, null, 2));
+    
     const { data } = await axios.post<GooglePlacesNewNearbyResponse>(GOOGLE_PLACES_NEW_URL, body, {
-      timeout: 8000,
+      timeout: 10000,
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
-        // Request photo resource names via photos[] so client can fetch Place Photos (New).
-        'X-Goog-FieldMask':
-          'places.id,places.displayName,places.types,places.rating,places.userRatingCount,places.priceLevel,places.location,places.shortFormattedAddress,places.formattedAddress,places.regularOpeningHours.openNow,places.photos',
+        // Simplified field mask for searchNearby (some fields cause errors)
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.types,places.location,places.rating,places.userRatingCount,places.priceLevel,places.shortFormattedAddress,places.currentOpeningHours,places.photos',
       },
     });
+    
+    console.log(`[Google Places] Response: ${data.places?.length || 0} places`);
+    
+    console.log(`[Google Places] Success: ${data.places?.length || 0} places returned`);
+    if (data.places && data.places.length > 0) {
+      const firstPlace = data.places[0];
+      console.log(`[Google Places] First place photos: ${firstPlace.photos?.length || 0} photos`);
+      if (firstPlace.photos?.[0]) {
+        console.log(`[Google Places] Photo name: ${firstPlace.photos[0].name}`);
+      }
+    }
 
     const results = data.places ?? [];
     return results
       .map(normalizeGooglePlace)
       .filter((p): p is Place => p != null)
       .slice(0, max);
-  } catch {
+  } catch (error: any) {
+    console.error('[Google Places] API (New) failed, falling back to legacy:', error.message);
     // Fallback to legacy Nearby Search if Places API (New) isn't available/enabled.
     // This does NOT provide photo names; callers will have `imageUrl` only.
     try {

@@ -47,6 +47,9 @@ const EVENT_KEYWORDS = [
   'comedy', 'stand-up', 'standup',
   'nightlife', 'club', 'clubs', 'party', 'parties',
   'workshop', 'workshops', 'class', 'classes',
+  'karaoke', // Added karaoke
+  'trivia', 'trivia night', // Added trivia
+  'open mic', 'open mike', // Added open mic
 ];
 
 // Location indicators (city, address, etc.)
@@ -134,10 +137,12 @@ export const classifyQuery = (query: string): ParsedQuery => {
     };
   }
 
-  // Default: assume it's a location (city, address, landmark)
+  // Default: assume it's a general search query (let backend handle it)
+  // Backend has hybrid OpenAI system that can understand complex queries
+  // Don't try to geocode abstract queries like "I want to meet women"
   return {
-    type: 'location',
-    location: query,
+    type: 'venue_type', // Changed from 'location' to 'venue_type'
+    venueTypes: [query], // Pass query to backend as-is
     rawQuery: query,
   };
 };
